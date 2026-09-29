@@ -7,6 +7,13 @@ const getSpirit = (id) => state.data.spirits.find(s => s.id === id);
 
 const effect = (attack, targets) => RocoEngine.effect(state.data.types, attack, targets);
 const kitOf = (spirit) => state.metaIndex ? state.metaIndex.kitFor(spirit) : null;
+// 读取上次保存的队伍。存储被禁用（隐私模式、拦截站点数据）或内容损坏时都当作没有保存过，不能因此让页面起不来。
+function readStored() {
+  try {
+    const stored=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
+    return stored&&typeof stored==='object'&&!Array.isArray(stored)?stored:{};
+  } catch (_) { return {}; }
+}
 function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify({team:state.team,opponents:state.opponents,size:state.size})); } catch (_) {}
 }
@@ -310,7 +317,7 @@ async function init() {
     state.data=await response.json();
     state.byName=new Map(state.data.spirits.map(s=>[s.name,s]));
     await Promise.all([loadMeta(),loadSeason()]);
-    const stored=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
+    const stored=readStored();
     state.size=stored.size===3?3:6; $('#team-size').value=state.size;
     state.team=Array.isArray(stored.team)?stored.team.filter(id=>getSpirit(id)).slice(0,state.size):[];
     state.opponents=Array.isArray(stored.opponents)?stored.opponents.filter(id=>getSpirit(id)).slice(0,state.size):[];
