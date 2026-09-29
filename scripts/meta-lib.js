@@ -71,16 +71,22 @@ function normalizeSkills(luaSource) {
 
 // ---- 阵容 ----
 
-function parseLineupPage(title, wikitext, revisedAt) {
-  const block = /\{\{精灵阵容\s*\n([\s\S]*?)\n\}\}/.exec(wikitext || '');
-  if (!block) return null;
+// 模板参数：`|键=值` 一行一个，值可以跨行。
+function parseTemplateFields(body) {
   const fields = {};
   let current = null;
-  for (const line of block[1].split('\n')) {
+  for (const line of body.split('\n')) {
     const field = /^\|([^=]+)=(.*)$/.exec(line);
     if (field) { current = field[1].trim(); fields[current] = field[2]; }
     else if (current) fields[current] += `\n${line}`;
   }
+  return fields;
+}
+
+function parseLineupPage(title, wikitext, revisedAt) {
+  const block = /\{\{精灵阵容\s*\n([\s\S]*?)\n\}\}/.exec(wikitext || '');
+  if (!block) return null;
+  const fields = parseTemplateFields(block[1]);
   const members = [];
   for (let i = 1; i <= 6; i++) {
     const name = clean(fields[`阵容精灵${i}`]);
@@ -104,6 +110,34 @@ function parseLineupPage(title, wikitext, revisedAt) {
     page: title,
     members
   };
+}
+
+// ---- BWIKI 新投稿系统监控 ----
+// 2026-07 BWIKI 改版投稿：导入官方阵容码（B~…），带“适用版本”，页面名为 `阵容:<id>-<名称>`；
+// 单只精灵的培养方案存为 `精灵培养方案/…`（先进“待审核”）。目前还没有真实投稿，这里只负责数数，
+// 出现真实投稿时由定时任务提醒，再去接入阵容码解码。
+const NEW_LINEUP_PREFIX = '阵容:';
+const NEW_BUILD_PREFIX = '精灵培养方案/';
+const NEW_BUILD_INDEX = new Set(['待审核', '投稿']);
+const TEST_MARK = /测试|\btest\b/i;
+
+function summarizeNewSystem({ lineupPages = [], buildTitles = [] }) {
+  const versions = {};
+  let pages = 0, real = 0;
+  for (const page of lineupPages) {
+    if (!page.title.startsWith(NEW_LINEUP_PREFIX)) continue;
+    const block = /\{\{阵容\s*\n([\s\S]*?)\n\}\}/.exec(page.text || '');
+    if (!block) continue;
+    pages += 1;
+    const fields = parseTemplateFields(block[1]);
+    const marked = [fields.name, fields.game_version, fields.tags, fields.summary].some(value => TEST_MARK.test(value || ''));
+    if (!fields.code || marked) continue; // 没有阵容码或明显是测试
+    real += 1;
+    const version = clean(fields.game_version) || '未填';
+    versions[version] = (versions[version] || 0) + 1;
+  }
+  const builds = buildTitles.filter(title => title.startsWith(NEW_BUILD_PREFIX) && !NEW_BUILD_INDEX.has(title.slice(NEW_BUILD_PREFIX.length))).length;
+  return { lineups: { pages, real, versions }, builds: { pages: builds, real: builds } };
 }
 
 // ---- 精灵名对应 ----
@@ -223,7 +257,7 @@ function aggregate(lineups) {
 
 // ---- 组装 ----
 
-function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls }) {
+function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, newSystem }) {
   const skills = normalizeSkills(skillsLua);
   const resolve = createResolver(data);
   const parsed = lineupPages
@@ -284,7 +318,8 @@ function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls }) {
         module: '模块:PetDexData/Skills',
         revised: isoDate(skillsRevised),
         count: Object.keys(skills).length
-      }
+      },
+      ...(newSystem ? { newSystem } : {})
     },
     skills,
     lineups,
@@ -327,4 +362,4 @@ function serialize(value, depth = 0) {
   return items.length ? `${Array.isArray(value) ? '[' : '{'}\n${items.join(',\n')}\n${' '.repeat(depth)}${Array.isArray(value) ? ']' : '}'}` : (Array.isArray(value) ? '[]' : '{}');
 }
 
-module.exports = { parseSelfRefund, buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };
+module.exports = { parseSelfRefund, summarizeNewSystem, parseTemplateFields, buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };

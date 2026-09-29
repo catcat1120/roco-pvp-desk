@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  issues: write # 新投稿系统出现真实投稿时提一个 issue
 
 concurrency:
   group: refresh-meta
@@ -47,3 +48,24 @@ jobs:
           git add meta.json
           git commit -m "Refresh meta.json from BWIKI ($(date -u +%F))"
           git push
+
+      # BWIKI 2026-07 改版的新投稿系统（含“适用版本”）一旦出现真实投稿，就提一个 issue 提醒接入阵容码解码。
+      # 只提一次：查的是全部状态的 issue，所以关掉之后也不会重复提。提 issue 失败不影响本次刷新。
+      - name: Open an issue when the new submission system has real data
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REAL=$(node -e "const s=require('./meta.json').source.newSystem; console.log(s ? s.lineups.real + s.builds.real : 0)")
+          echo "新投稿系统的真实投稿数：$REAL"
+          if [ "$REAL" -eq 0 ]; then
+            exit 0
+          fi
+          echo "::warning::BWIKI 新投稿系统出现了 $REAL 份真实投稿，需要接入"
+          TITLE="BWIKI 新投稿系统出现了真实投稿，需要接入"
+          if [ -n "$(gh issue list --state all --search "\"$TITLE\" in:title" --json number --jq '.[0].number')" ]; then
+            echo "已经提过 issue，不再重复"
+            exit 0
+          fi
+          DETAIL=$(node -e "console.log(JSON.stringify(require('./meta.json').source.newSystem, null, 2))")
+          gh issue create --title "$TITLE" --body "$(printf '每周刷新发现 BWIKI 的新投稿系统出现了真实投稿：\n\n```json\n%s\n```\n\n下一步：\n- 移植 BWIKI 的 `模块:LineupCode` 解码官方阵容码（`B~…`）\n- 只收录“适用版本”为当前赛季的投稿，见 `season.json`；更早赛季的暂不考虑\n- 培养方案页面的模板格式还没有样本，需要先看一份真实页面\n\n这个 issue 由 `.github/workflows/refresh-meta.yml` 自动创建，只会创建一次。' "$DETAIL")"

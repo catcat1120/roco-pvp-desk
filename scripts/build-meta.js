@@ -14,7 +14,7 @@
 // 在需要走代理的环境里运行时加 NODE_USE_ENV_PROXY=1。
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildMeta, serialize, checkRegression, sameContent } = require('./meta-lib.js');
+const { buildMeta, serialize, checkRegression, sameContent, summarizeNewSystem } = require('./meta-lib.js');
 
 const ROOT = path.join(__dirname, '..');
 const SITE = 'https://wiki.biligame.com/rocom/';
@@ -70,6 +70,26 @@ async function revisions(titles) {
     .map(page => ({ title: page.title, text: page.revisions[0].slots.main['*'], revised: page.revisions[0].timestamp }));
 }
 
+async function listPrefix(prefix) {
+  const titles = [];
+  for (let cont = {}; ;) {
+    const json = await call({ action: 'query', list: 'allpages', apprefix: prefix, aplimit: '500', ...cont });
+    titles.push(...json.query.allpages.map(page => page.title));
+    if (!json.continue) break;
+    cont = { apcontinue: json.continue.apcontinue };
+  }
+  return titles;
+}
+
+// BWIKI 2026-07 改版的新投稿系统（含“适用版本”）：只数数，不解析阵容码。见 meta-lib 的 summarizeNewSystem。
+async function probeNewSystem() {
+  const lineupTitles = await listPrefix('阵容:');
+  const buildTitles = await listPrefix('精灵培养方案/');
+  const lineupPages = [];
+  for (let i = 0; i < lineupTitles.length; i += BATCH) lineupPages.push(...await revisions(lineupTitles.slice(i, i + BATCH)));
+  return summarizeNewSystem({ lineupPages, buildTitles });
+}
+
 async function main() {
   const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data.json'), 'utf8'));
 
@@ -93,20 +113,32 @@ async function main() {
     lineupPages.push(...await revisions(titles.slice(i, i + BATCH)));
   }
 
+  const target = path.join(ROOT, 'meta.json');
+  const previous = fs.existsSync(target) ? JSON.parse(fs.readFileSync(target, 'utf8')) : null;
+
+  // 探测失败不影响主数据：沿用上一次的结果，避免无谓的改动。
+  let newSystem;
+  try {
+    console.error('新投稿系统…');
+    newSystem = await probeNewSystem();
+  } catch (error) {
+    console.error(`  探测失败，沿用上次结果：${error.message}`);
+    newSystem = previous && previous.source.newSystem;
+  }
+
   const meta = buildMeta({
     skillsLua: skillsPage.text,
     skillsRevised: skillsPage.revised,
     lineupPages,
     data,
     now: new Date().toISOString(),
+    newSystem,
     urls: {
       site: SITE,
       lineups: `${SITE}${encodeURIComponent('阵容一览')}`,
       skills: `${SITE}${encodeURIComponent('技能图鉴')}`
     }
   });
-  const target = path.join(ROOT, 'meta.json');
-  const previous = fs.existsSync(target) ? JSON.parse(fs.readFileSync(target, 'utf8')) : null;
   const problems = checkRegression(previous, meta);
   if (problems.length && !force) {
     throw new Error(`新数据明显少于现有 meta.json，已拒绝覆盖（确认无误后加 --force）：\n  - ${problems.join('\n  - ')}`);
@@ -120,6 +152,10 @@ async function main() {
   const { lineups, skills } = meta.source;
   console.error(`已写入 meta.json：${lineups.pvp} 份 PvP 阵容（${lineups.authors} 位作者，投稿 ${lineups.firstSubmitted} ~ ${lineups.lastSubmitted}），${skills.count} 个技能（修订于 ${skills.revised}）`);
   if (lineups.unresolvedSpirits.length) console.error(`  未在 data.json 中找到的精灵：${lineups.unresolvedSpirits.join('、')}`);
+  if (newSystem) {
+    const found = newSystem.lineups.real + newSystem.builds.real;
+    console.error(`  新投稿系统：阵容页 ${newSystem.lineups.pages}（真实 ${newSystem.lineups.real}），培养方案 ${newSystem.builds.real}${found ? '  ← 出现真实投稿，需要接入' : '（尚无真实投稿）'}`);
+  }
   if (lineups.unknownSkills.length) console.error(`  技能表中没有的技能：${lineups.unknownSkills.join('、')}`);
 }
 

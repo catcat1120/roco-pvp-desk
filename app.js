@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'roco-pvp-desk-v1';
-const state = { data: null, meta: null, metaIndex: null, byName: new Map(), skillAuthors: new Map(), team: [], opponents: [], size: 6, tab: 'team', selected: null };
+const state = { data: null, meta: null, season: null, metaIndex: null, byName: new Map(), skillAuthors: new Map(), team: [], opponents: [], size: 6, tab: 'team', selected: null };
 const $ = (selector) => document.querySelector(selector);
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const allTypes = () => Object.keys(state.data.types);
@@ -130,16 +130,35 @@ const STALE_DAYS = 60;
 const plural = (n) => `${n} 位作者`;
 const safeUrl = (url) => /^https:\/\//.test(url) ? url : '#';
 const metaSpirit = (name) => name && state.byName.get(name);
+const KIND_CLASS = { '官方': 'official', '工具站': 'tool', '媒体': 'media' };
+function renderSeason() {
+  const box=$('#season-notes'), data=state.season;
+  if (!data) { box.hidden=true; box.innerHTML=''; return; }
+  const s=data.season;
+  const items=data.items.map(item=>`<li><span class="kind ${KIND_CLASS[item.kind]||''}">${escapeHTML(item.kind)}</span><time>${escapeHTML(item.date)}</time><span class="what">${escapeHTML(item.text)}<a href="${escapeHTML(safeUrl(item.source.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(item.source.name)}</a></span></li>`).join('');
+  const gaps=data.gaps.map(text=>`<li>${escapeHTML(text)}</li>`).join('');
+  const pointers=data.pointers.map(p=>`<li><a href="${escapeHTML(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(p.title)}</a><span class="card-meta">${escapeHTML(p.site)} · ${escapeHTML(p.note)}</span></li>`).join('');
+  box.innerHTML=`<div class="panel-heading"><div><p class="section-kicker">当前赛季</p><h2>${escapeHTML(s.id)}「${escapeHTML(s.name)}」动向</h2></div><span class="mini-label">${escapeHTML(s.startsOn)} 开赛 · 人工整理于 ${escapeHTML(data.curatedOn)}</span></div>`
+    +`<ul class="season-list">${items}</ul>`
+    +`<div class="season-gaps"><h3>暂未收录</h3><ul>${gaps}</ul>${pointers?`<h3>可自行查看（未能自动读取）</h3><ul class="pointer-list">${pointers}</ul>`:''}</div>`
+    +`<p class="provenance-note">${escapeHTML(data.note)}</p>`;
+  box.hidden=false;
+}
 function renderProvenance() {
   const m=state.meta, l=m.source.lineups, k=m.source.skills, age=RocoMeta.ageInDays(l.lastSubmitted);
   const stale=age!==null && age>STALE_DAYS;
+  const season=state.season&&state.season.season;
+  const beforeSeason=season&&l.lastSubmitted<season.startsOn;
+  const skillsBefore=season&&k.revised<season.startsOn;
+  const fresh=m.source.newSystem;
   $('#meta-source').innerHTML=`<div class="provenance-head"><span class="badge">社区推荐</span><strong>来源：<a href="${escapeHTML(safeUrl(m.source.lineups.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(m.source.name)}</a> 玩家阵容投稿</strong></div>`
     +`<dl class="provenance-list">`
     +`<div><dt>投稿样本</dt><dd>${l.pvp} 份 PvP 阵容 · ${plural(l.authors)}（同一作者重复保存的同一套阵容只算一次，去重后 ${l.submissions} 份）</dd></div>`
     +`<div><dt>投稿日期</dt><dd>${escapeHTML(l.firstSubmitted)} 至 ${escapeHTML(l.lastSubmitted)}${age!==null?`（最近一份距今 ${age} 天）`:''}</dd></div>`
-    +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">BWIKI 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能</dd></div>`
+    +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">BWIKI 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能${skillsBefore?`（早于 ${escapeHTML(season.id)} 开赛，${escapeHTML(season.id)} 新增的技能未收录）`:''}</dd></div>`
+    +(fresh?`<div><dt>新版投稿</dt><dd>${fresh.lineups.real+fresh.builds.real>0?`BWIKI 新投稿系统（含适用版本）已有 ${fresh.lineups.real} 份阵容、${fresh.builds.real} 份培养方案，尚未接入`:'BWIKI 新投稿系统（含适用版本）暂无真实投稿，所以没有新赛季的阵容数据'}</dd></div>`:'')
     +`<div><dt>数据生成</dt><dd>${escapeHTML(m.generatedAt.slice(0,10))}（定时抓取，内容有变化才更新）</dd></div></dl>`
-    +`<p class="provenance-note${stale?' stale':''}">${escapeHTML(m.notice)} 下面的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${stale?' 最近一份投稿已是数月前，新赛季的调整不会体现在这里。':''}</p>`;
+    +`<p class="provenance-note${stale?' stale':''}">${escapeHTML(m.notice)} 下面的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${beforeSeason?` 这些投稿全部早于 ${escapeHTML(season.id)} 开赛（${escapeHTML(season.startsOn)}），不反映当前赛季的环境。`:stale?' 最近一份投稿已是数月前，新赛季的调整不会体现在这里。':''}</p>`;
 }
 function spiritChip(member) {
   const spirit=metaSpirit(member.ref);
@@ -190,6 +209,7 @@ function renderSkills() {
   box.innerHTML=hits.length?`<p class="card-meta result-note">共 ${hits.length} 个技能${hits.length>30?'，显示前 30 个':''}，按投稿收录数排序。</p>`+hits.slice(0,30).map(([name,skill])=>skillRow(name,skill,hot.get(name))).join(''):'<div class="empty">没有找到匹配的技能。</div>';
 }
 function renderMeta() {
+  renderSeason();
   if (!state.meta) {
     $('#meta-source').innerHTML='<div class="empty">社区推荐数据暂时无法载入，其余功能不受影响。</div>';
     for (const id of ['#hot-lineups','#hot-spirits','#hot-skills']) $(id).innerHTML='';
@@ -215,6 +235,13 @@ function loadLineup(kind,index) {
   const skipped=lineup.members.length-spirits.length;
   announce(`已载入为${label}阵容：${RocoMeta.lineupTitle(lineup)}${skipped?`（${skipped} 只不在资料库中，已跳过）`:''}`);
 }
+async function loadSeason() {
+  try {
+    const response=await fetch('./season.json'); if(!response.ok)throw new Error('season unavailable');
+    const season=await response.json(); if(season.schema!==1||!season.season||!Array.isArray(season.items))throw new Error('season schema');
+    state.season={ gaps: [], pointers: [], ...season };
+  } catch(_) { state.season=null; }
+}
 async function loadMeta() {
   try {
     const response=await fetch('./meta.json'); if(!response.ok)throw new Error('meta unavailable');
@@ -230,7 +257,7 @@ async function init() {
     const response=await fetch('./data.json'); if(!response.ok)throw new Error('资料无法载入');
     state.data=await response.json();
     state.byName=new Map(state.data.spirits.map(s=>[s.name,s]));
-    await loadMeta();
+    await Promise.all([loadMeta(),loadSeason()]);
     const stored=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
     state.size=stored.size===3?3:6; $('#team-size').value=state.size;
     state.team=Array.isArray(stored.team)?stored.team.filter(id=>getSpirit(id)).slice(0,state.size):[];

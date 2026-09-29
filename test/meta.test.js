@@ -5,6 +5,7 @@ const lib = require('../scripts/meta-lib.js');
 const RocoMeta = require('../meta.js');
 const data = require('../data.json');
 const meta = require('../meta.json');
+const season = require('../season.json');
 
 // ---- Lua 表解析 ----
 
@@ -243,8 +244,84 @@ test('the refresh workflow only commits meta.json and runs the tests around the 
   assert.match(yml, /workflow_dispatch:/);
   assert.match(yml, /permissions:\s*\n\s+contents: write/);
   assert.ok(yml.indexOf('npm test') < yml.indexOf('npm run meta') && yml.indexOf('npm run meta') < yml.lastIndexOf('npm test'));
+  assert.match(yml, /issues: write/);
+  assert.match(yml, /gh issue list --state all/, 'searches closed issues too, so it is only ever filed once');
+  assert.match(yml, /name: Open an issue[^\n]*\n\s+continue-on-error: true/, 'a failed notification must not fail the refresh');
+  assert.ok(yml.indexOf('git push') < yml.indexOf('gh issue create'), 'the data is committed before any notification');
   assert.match(yml, /git add meta\.json\n/);
   assert.doesNotMatch(yml, /git add (-A|\.)/);
+});
+
+// ---- 新投稿系统监控 ----
+
+const newLineup = (fields) => ({ title: `阵容:${fields.id || 'x'}`, text: `{{阵容\n${Object.entries(fields).filter(([k]) => k !== 'id').map(([k, v]) => `|${k}=${v}`).join('\n')}\n}}` });
+
+test('summarizeNewSystem ignores test pages and index pages, and counts real submissions by version', () => {
+  const summary = lib.summarizeNewSystem({
+    lineupPages: [
+      newLineup({ id: 'a1', code: 'B%7Ex', name: '测试2', game_version: '测试', tags: '测试' }),
+      newLineup({ id: 'a2', code: 'B%7Ey', name: '雷鸣轮转', game_version: 'S4', tags: '排位' }),
+      newLineup({ id: 'a3', code: 'B%7Ez', name: '雪天队', game_version: 'S4' }),
+      newLineup({ id: 'a4', code: 'B%7Ew', name: '老队', game_version: 'S3' }),
+      newLineup({ id: 'a5', name: '没有阵容码', game_version: 'S4' }),
+      newLineup({ id: 'a6', code: 'B%7Ev', name: 'Test lineup', game_version: 'S4' }),
+      { title: '阵容:坏页面', text: '没有模板' },
+      { title: '阵容一览', text: newLineup({ code: 'B', name: '不该被计入' }).text }
+    ],
+    buildTitles: ['精灵培养方案/待审核', '精灵培养方案/投稿', '精灵培养方案/12-abcdef-1', '精灵培养方案/13-abcdef-2', '别的页面/1']
+  });
+  assert.equal(summary.lineups.pages, 6, 'pages with the template under the 阵容: prefix');
+  assert.equal(summary.lineups.real, 3);
+  assert.deepEqual(summary.lineups.versions, { S4: 2, S3: 1 });
+  assert.deepEqual(summary.builds, { pages: 2, real: 2 });
+});
+
+test('summarizeNewSystem on an empty system reports zero', () => {
+  assert.deepEqual(lib.summarizeNewSystem({}), { lineups: { pages: 0, real: 0, versions: {} }, builds: { pages: 0, real: 0 } });
+});
+
+test('buildMeta records the new-system summary only when it is given', () => {
+  const args = { skillsLua: skillsLua, skillsRevised: '2026-08-13T00:00:00Z', lineupPages: [], data: mini, now: '2026-09-29T00:00:00.000Z', urls: { site: 's', lineups: 'l', skills: 'k' } };
+  assert.equal('newSystem' in lib.buildMeta(args).source, false);
+  const summary = lib.summarizeNewSystem({});
+  assert.deepEqual(lib.buildMeta({ ...args, newSystem: summary }).source.newSystem, summary);
+});
+
+test('meta.json carries the new-system counts used by the weekly notification', () => {
+  const ns = meta.source.newSystem;
+  assert.ok(ns, 'source.newSystem is recorded');
+  for (const n of [ns.lineups.pages, ns.lineups.real, ns.builds.pages, ns.builds.real]) assert.ok(Number.isInteger(n) && n >= 0);
+  assert.ok(ns.lineups.real <= ns.lineups.pages && ns.builds.real <= ns.builds.pages);
+  assert.equal(Object.values(ns.lineups.versions).reduce((a, b) => a + b, 0), ns.lineups.real);
+});
+
+// ---- season.json：人工整理的当前赛季动向 ----
+
+test('season.json describes exactly one season and only recent, sourced items', () => {
+  assert.equal(season.schema, 1);
+  assert.match(season.season.startsOn, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(season.season.id && season.season.name);
+  assert.match(season.curatedOn, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(season.items.length >= 3);
+  const lead = new Date(Date.parse(season.season.startsOn) - 14 * 86400000).toISOString().slice(0, 10);
+  for (const item of season.items) {
+    assert.match(item.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(item.date <= season.curatedOn, `${item.text} is dated after it was curated`);
+    assert.ok(item.date >= lead, `${item.date} is older than the current season's lead-up: earlier seasons are out of scope`);
+    assert.ok(['官方', '工具站', '媒体'].includes(item.kind), item.kind);
+    assert.ok(item.text.length >= 8);
+    assert.ok(item.source.name && /^https:\/\//.test(item.source.url), `${item.text} needs a named https source`);
+    assert.doesNotMatch(item.text, /使用率|胜率|占比|出场率/, 'no usage numbers in curated notes');
+  }
+  const dates = season.items.map(item => item.date);
+  assert.deepEqual(dates, [...dates].sort().reverse(), 'newest first');
+});
+
+test('season.json is honest about what it could not read', () => {
+  assert.ok(season.gaps.length >= 1);
+  for (const pointer of season.pointers) {
+    assert.ok(/^https:\/\//.test(pointer.url) && pointer.title && pointer.note, 'a pointer says what it is and what could not be read');
+  }
 });
 
 // ---- 已提交的 meta.json ----

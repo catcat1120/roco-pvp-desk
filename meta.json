@@ -1,13 +1,14 @@
 {
  "schema": 1,
- "generatedAt": "2026-09-29T04:52:58.746Z",
+ "generatedAt": "2026-09-29T05:20:04.064Z",
  "label": "社区推荐",
  "notice": "数据来自玩家投稿，不代表对局使用率；赛季更新后的强度请以游戏内为准。",
  "source": {
   "name": "洛克王国 BWIKI",
   "url": "https://wiki.biligame.com/rocom/",
   "lineups": {"url":"https://wiki.biligame.com/rocom/%E9%98%B5%E5%AE%B9%E4%B8%80%E8%A7%88","category":"分类:精灵阵容","pages":204,"pvp":177,"submissions":149,"authors":129,"firstSubmitted":"2025-04-19","lastSubmitted":"2026-06-10","unresolvedSpirits":["健猫教练","圣代甜甜","多灵主","格斗小八"],"unknownSkills":["小偷小摸","幼态延续","泥沼","湿润印记","溶解液","玩具乐园","藤鞭","逆向演化","龙之舞"]},
-  "skills": {"url":"https://wiki.biligame.com/rocom/%E6%8A%80%E8%83%BD%E5%9B%BE%E9%89%B4","module":"模块:PetDexData/Skills","revised":"2026-08-13","count":553}
+  "skills": {"url":"https://wiki.biligame.com/rocom/%E6%8A%80%E8%83%BD%E5%9B%BE%E9%89%B4","module":"模块:PetDexData/Skills","revised":"2026-08-13","count":553},
+  "newSystem": {"lineups":{"pages":1,"real":0,"versions":{}},"builds":{"pages":0,"real":0}}
  },
  "skills": {
   "抓挠": {"element":"普通","category":"攻击","damageClass":"物攻","power":35,"hits":1,"energy":0,"refund":1,"target":"敌方随机单体","desc":"造成物伤，自己回复1能量。"},

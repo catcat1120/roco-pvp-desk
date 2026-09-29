@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "season": { "id": "S4", "name": "月涌狂想", "startsOn": "2026-09-10" },
+  "curatedOn": "2026-09-29",
+  "note": "人工整理，只收录已读到原文、能确认日期与出处的信息，只写当前赛季；不含使用率。",
+  "items": [
+    { "date": "2026-09-10", "kind": "官方", "text": "S4「月涌狂想」开启，版本更新完成；首届高校邀请赛同步开启。", "source": { "name": "腾讯新闻（开服公告）", "url": "https://news.qq.com/rain/a/20260910A0372J00" } },
+    { "date": "2026-09-10", "kind": "工具站", "text": "roco-showdown 完成 S4 数据更新：新增 29 个图鉴条目（含形态），累计 623 条，并同步调整旧精灵的种族值、技能、特性与学习列表；其对战引擎仍按 S3 规则。", "source": { "name": "roco-showdown 更新公告", "url": "https://roco-showdown.com/" } },
+    { "date": "2026-09-05", "kind": "官方", "text": "公布 S4 新技能演示，以及新首领形态精灵烈焰狂战士、满月砣。", "source": { "name": "腾讯新闻", "url": "https://news.qq.com/rain/a/20260905V04JW600" } },
+    { "date": "2026-09-03", "kind": "官方", "text": "公布 S4 部分新增和优化内容的实机预览。", "source": { "name": "腾讯新闻", "url": "https://news.qq.com/rain/a/20260903V04KJ200" } },
+    { "date": "2026-09-02", "kind": "官方", "text": "发布 S4「月涌狂想」版本更新公告；新赛季内容在一张长图里，文字未收录。", "source": { "name": "TapTap 官方公告", "url": "https://www.taptap.cn/moment/844161890127973848" } },
+    { "date": "2026-08-30", "kind": "官方", "text": "公布 S4 赛季奇遇新精灵，并确认 S4 于 9 月 10 日开启。", "source": { "name": "腾讯新闻", "url": "https://news.qq.com/rain/a/20260830V051Y900" } }
+  ],
+  "gaps": [
+    "S4 平衡性调整的具体名单：官方公告是长图；文字版汇总（如百度贴吧）需要安全验证，无法读取，暂不收录。",
+    "S4 热门阵容：目前只见于视频和图片，无法自动读取，下面的热门配队不含 S4。"
+  ],
+  "pointers": [
+    { "title": "【洛克时报44.0】S4赛季竞技场PVP萌新、科研及热门阵容一图流", "site": "哔哩哔哩", "url": "https://www.bilibili.com/video/BV1N8hk6rErM/", "note": "视频，内容与发布日期未能读取（B站接口反爬）" }
+  ]
+}
