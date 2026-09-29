@@ -163,8 +163,10 @@ test('analyzeTeam passes kits through', () => {
   assert.equal(row.best.duel.basis, 'skill');
 });
 
-test('ASSUMED_POWER matches the median attack power in meta.json', () => {
+test('ASSUMED_POWER stays close to the median attack power in meta.json', () => {
+  // 只做健全性检查：定时刷新新增技能会让中位数小幅漂移，不应因此卡住刷新；漂移很大才提醒人工调整。
   const meta = require('../meta.json');
   const powers = Object.values(meta.skills).filter(s => s.category === '攻击').map(s => s.power).sort((a, b) => a - b);
-  assert.equal(powers[powers.length >> 1], engine.ASSUMED_POWER);
+  const median = powers[powers.length >> 1];
+  assert.ok(Math.abs(median - engine.ASSUMED_POWER) <= 10, `median is now ${median}; update ASSUMED_POWER`);
 });

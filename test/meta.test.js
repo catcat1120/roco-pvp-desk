@@ -188,6 +188,40 @@ test('serialize round-trips and puts list items on separate lines', () => {
   assert.ok(text.split('\n').length >= 6);
 });
 
+// ---- 定时刷新的保护 ----
+
+const snapshot = (over = {}) => ({
+  generatedAt: '2026-09-29T00:00:00.000Z',
+  source: { skills: { count: 500 }, lineups: { pvp: 100, authors: 60, lastSubmitted: '2026-06-10' } },
+  skills: {}, lineups: [], hot: {}, ...over
+});
+
+test('checkRegression lets normal changes through and blocks shrinking data', () => {
+  assert.deepEqual(lib.checkRegression(null, snapshot()), [], 'first run has nothing to compare');
+  assert.deepEqual(lib.checkRegression(snapshot(), snapshot({ source: { skills: { count: 520 }, lineups: { pvp: 101, authors: 61, lastSubmitted: '2026-06-12' } } })), []);
+  assert.deepEqual(lib.checkRegression(snapshot(), snapshot({ source: { skills: { count: 460 }, lineups: { pvp: 100, authors: 60, lastSubmitted: '2026-06-10' } } })), [], 'a 8% dip is tolerated');
+  const problems = lib.checkRegression(snapshot(), snapshot({ source: { skills: { count: 0 }, lineups: { pvp: 40, authors: 10, lastSubmitted: '2026-05-01' } } }));
+  assert.equal(problems.length, 4, 'skills, lineups, authors and a date that moved backwards');
+  assert.match(problems.join(' '), /技能数.*500.*0/);
+});
+
+test('sameContent ignores only the fetch timestamp', () => {
+  const a = snapshot();
+  assert.ok(lib.sameContent(a, snapshot({ generatedAt: '2026-10-06T00:00:00.000Z' })));
+  assert.ok(!lib.sameContent(a, snapshot({ skills: { 新技能: {} } })));
+  assert.ok(!lib.sameContent(null, a));
+});
+
+test('the refresh workflow only commits meta.json and runs the tests around the fetch', () => {
+  const yml = require('node:fs').readFileSync(require('node:path').join(__dirname, '../.github/workflows/refresh-meta.yml'), 'utf8');
+  assert.match(yml, /cron: '[^']+'/);
+  assert.match(yml, /workflow_dispatch:/);
+  assert.match(yml, /permissions:\s*\n\s+contents: write/);
+  assert.ok(yml.indexOf('npm test') < yml.indexOf('npm run meta') && yml.indexOf('npm run meta') < yml.lastIndexOf('npm test'));
+  assert.match(yml, /git add meta\.json\n/);
+  assert.doesNotMatch(yml, /git add (-A|\.)/);
+});
+
 // ---- 已提交的 meta.json ----
 
 test('meta.json describes its source, dates and community-recommendation label', () => {

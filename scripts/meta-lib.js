@@ -272,6 +272,30 @@ function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls }) {
   };
 }
 
+// 定时任务的两道保险：BWIKI 故障、被破坏或改版时，不让明显缺失的数据覆盖掉现有的 meta.json。
+const SHRINK_LIMIT = 0.9;
+function checkRegression(previous, next) {
+  if (!previous) return [];
+  const problems = [];
+  const drop = (label, before, after) => {
+    if (before > 0 && after < before * SHRINK_LIMIT) problems.push(`${label}从 ${before} 降到 ${after}（超过 ${Math.round((1 - SHRINK_LIMIT) * 100)}%）`);
+  };
+  drop('技能数', previous.source.skills.count, next.source.skills.count);
+  drop('PvP 阵容数', previous.source.lineups.pvp, next.source.lineups.pvp);
+  drop('投稿作者数', previous.source.lineups.authors, next.source.lineups.authors);
+  if (previous.source.lineups.lastSubmitted && next.source.lineups.lastSubmitted < previous.source.lineups.lastSubmitted) {
+    problems.push(`最近投稿日期倒退：${previous.source.lineups.lastSubmitted} → ${next.source.lineups.lastSubmitted}`);
+  }
+  return problems;
+}
+
+// 只有抓取时间不同不算变化，避免每次定时任务都产生一个空提交。
+function sameContent(a, b) {
+  if (!a || !b) return false;
+  const strip = ({ generatedAt, ...rest }) => JSON.stringify(rest);
+  return strip(a) === strip(b);
+}
+
 // 顶层与列表逐行展开，其余压成一行：既保持文件不大，又让每次刷新的 diff 可读。
 function serialize(value, depth = 0) {
   const expand = (Array.isArray(value) && depth <= 2) || (value && typeof value === 'object' && !Array.isArray(value) && depth <= 1);
@@ -283,4 +307,4 @@ function serialize(value, depth = 0) {
   return items.length ? `${Array.isArray(value) ? '[' : '{'}\n${items.join(',\n')}\n${' '.repeat(depth)}${Array.isArray(value) ? ']' : '}'}` : (Array.isArray(value) ? '[]' : '{}');
 }
 
-module.exports = { buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean };
+module.exports = { buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };

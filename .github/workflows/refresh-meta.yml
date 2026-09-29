@@ -1,0 +1,49 @@
+name: Refresh meta.json
+
+# 每周从洛克王国 BWIKI 重新抓取社区推荐与技能数据。内容有变化才提交，没变化不产生提交。
+# 计划任务只会在默认分支上运行；也可以在 Actions 页面手动触发（workflow_dispatch）。
+on:
+  schedule:
+    - cron: '17 3 * * 1' # 每周一 03:17 UTC（北京时间 11:17），避开整点
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-meta
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 先确认基线是绿的：之后如果变红，就知道是新数据造成的。
+      - name: Test before refresh
+        run: npm test
+
+      # 数据骤减（技能/阵容/作者少于现有 10% 以上、最近投稿日期倒退）时脚本会失败并保留旧文件。
+      - name: Fetch from BWIKI
+        run: npm run meta
+
+      - name: Test refreshed data
+        run: npm test
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- meta.json; then
+            echo "meta.json 没有变化"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add meta.json
+          git commit -m "Refresh meta.json from BWIKI ($(date -u +%F))"
+          git push

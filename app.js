@@ -130,7 +130,7 @@ function renderProvenance() {
     +`<div><dt>投稿样本</dt><dd>${l.pvp} 份 PvP 阵容 · ${plural(l.authors)}（同一作者重复保存的同一套阵容只算一次，去重后 ${l.submissions} 份）</dd></div>`
     +`<div><dt>投稿日期</dt><dd>${escapeHTML(l.firstSubmitted)} 至 ${escapeHTML(l.lastSubmitted)}${age!==null?`（最近一份距今 ${age} 天）`:''}</dd></div>`
     +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">BWIKI 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能</dd></div>`
-    +`<div><dt>抓取日期</dt><dd>${escapeHTML(m.generatedAt.slice(0,10))}</dd></div></dl>`
+    +`<div><dt>数据生成</dt><dd>${escapeHTML(m.generatedAt.slice(0,10))}（定时抓取，内容有变化才更新）</dd></div></dl>`
     +`<p class="provenance-note${stale?' stale':''}">${escapeHTML(m.notice)} 下面的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${stale?' 最近一份投稿已是数月前，新赛季的调整不会体现在这里。':''}</p>`;
 }
 function spiritChip(member) {
