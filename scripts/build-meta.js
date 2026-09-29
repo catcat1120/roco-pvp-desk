@@ -92,6 +92,8 @@ async function probeNewSystem() {
 
 async function main() {
   const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data.json'), 'utf8'));
+  // “当下”以 season.json 的开赛日为界：热门只统计开赛之后的投稿。换赛季时更新 season.json 再刷新。
+  const { season } = JSON.parse(fs.readFileSync(path.join(ROOT, 'season.json'), 'utf8'));
 
   console.error('技能数据…');
   const [skillsPage] = await revisions(['模块:PetDexData/Skills']);
@@ -133,6 +135,7 @@ async function main() {
     data,
     now: new Date().toISOString(),
     newSystem,
+    season,
     urls: {
       site: SITE,
       lineups: `${SITE}${encodeURIComponent('阵容一览')}`,
@@ -150,6 +153,8 @@ async function main() {
   fs.writeFileSync(target, `${serialize(meta)}\n`);
 
   const { lineups, skills } = meta.source;
+  const { hot } = meta;
+  console.error(`热门只统计 ${hot.season.id}（${hot.season.startsOn} 起）的投稿：${hot.sample.lineups} 份阵容，${hot.sample.authors} 位作者${hot.sample.lineups ? '' : '（暂无当下数据，热门面板为空）'}`);
   console.error(`已写入 meta.json：${lineups.pvp} 份 PvP 阵容（${lineups.authors} 位作者，投稿 ${lineups.firstSubmitted} ~ ${lineups.lastSubmitted}），${skills.count} 个技能（修订于 ${skills.revised}）`);
   if (lineups.unresolvedSpirits.length) console.error(`  未在 data.json 中找到的精灵：${lineups.unresolvedSpirits.join('、')}`);
   if (newSystem) {

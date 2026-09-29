@@ -252,6 +252,72 @@ test('the refresh workflow only commits meta.json and runs the tests around the 
   assert.doesNotMatch(yml, /git add (-A|\.)/);
 });
 
+// ---- “当下”：热门只统计当前赛季开赛之后的投稿 ----
+
+const seasonPage = (title, author, date, names, skill = '连环火') => ({
+  title: `精灵阵容/${title}`, revised: `${date}T08:00:00Z`,
+  text: `{{精灵阵容\n|阵容标题=${title}\n|阵容作者=${author}\n|阵容类型=pvp\n|阵容上传日期=${date}\n${names.map((name, i) => `|阵容精灵${i + 1}=${name}\n|阵容精灵${i + 1}技能1=${skill}`).join('\n')}\n}}`
+});
+const seasonArgs = (lineupPages, season = { id: 'S4', startsOn: '2026-09-10' }) => ({
+  skillsLua, skillsRevised: '2026-08-13T00:00:00Z', lineupPages, data: mini, now: '2026-09-29T00:00:00.000Z',
+  urls: { site: 's', lineups: 'l', skills: 'k' }, season
+});
+
+test('hot lists only count submissions from the current season onward, but all lineups are kept', () => {
+  const built = lib.buildMeta(seasonArgs([
+    seasonPage('旧队', '甲', '2026-06-01', ['岚鸟', '权杖-Ⅴ']),
+    seasonPage('旧队2', '乙', '2026-09-09', ['岚鸟', '权杖-Ⅴ']),   // 开赛前一天
+    seasonPage('新队', '丙', '2026-09-10', ['权杖-Ⅴ', '甜甜']),      // 开赛当天：算
+    seasonPage('新队2', '丁', '2026-09-20', ['权杖-Ⅴ', '雪球（甲）'])
+  ]));
+  assert.equal(built.lineups.length, 4, 'older lineups stay available to the matchup engine');
+  assert.deepEqual(built.hot.season, { id: 'S4', startsOn: '2026-09-10' });
+  assert.deepEqual(built.hot.sample, { lineups: 2, submissions: 2, authors: 2 });
+  const names = built.hot.spirits.map(spirit => spirit.name);
+  assert.ok(names.includes('权杖-Ⅴ'));
+  assert.ok(!names.includes('岚鸟'), 'a spirit that only appears before the season is not hot');
+  const top = built.hot.spirits.find(spirit => spirit.name === '权杖-Ⅴ');
+  assert.equal(top.authors, 2, 'only the two current-season authors count, not the older two');
+  for (const row of built.hot.lineups) {
+    const lineup = built.lineups[row.lineup];
+    assert.ok(lineup.date >= '2026-09-10', 'hot lineups point at current-season lineups in the full list');
+    assert.ok(row.firstSubmitted >= '2026-09-10');
+  }
+});
+
+test('with no current-season submissions every hot list is empty and says so', () => {
+  const built = lib.buildMeta(seasonArgs([seasonPage('旧队', '甲', '2026-06-01', ['岚鸟']), seasonPage('旧队2', '乙', '2026-08-01', ['岚鸟'])]));
+  assert.equal(built.lineups.length, 2);
+  assert.deepEqual(built.hot.sample, { lineups: 0, submissions: 0, authors: 0 });
+  assert.deepEqual([built.hot.lineups, built.hot.spirits, built.hot.skills], [[], [], []]);
+});
+
+test('moving the season start moves the hot window', () => {
+  const pages = [seasonPage('a', '甲', '2026-06-01', ['岚鸟']), seasonPage('b', '乙', '2026-09-15', ['岚鸟'])];
+  assert.equal(lib.buildMeta(seasonArgs(pages, { id: 'S3', startsOn: '2026-07-16' })).hot.sample.lineups, 1);
+  assert.equal(lib.buildMeta(seasonArgs(pages, { id: 'S2', startsOn: '2026-05-01' })).hot.sample.lineups, 2);
+});
+
+test('buildMeta refuses to run without a valid season', () => {
+  assert.throws(() => lib.buildMeta({ ...seasonArgs([]), season: undefined }), /season/);
+  assert.throws(() => lib.buildMeta(seasonArgs([], { id: 'S4', startsOn: '2026-13-40' })), /season/);
+  assert.throws(() => lib.buildMeta(seasonArgs([], { startsOn: '2026-09-10' })), /season/);
+});
+
+test('currentHot reports ok, empty, or stale, and flags tiny samples', () => {
+  const hot = (over = {}) => ({ season: { id: 'S4', startsOn: '2026-09-10' }, sample: { lineups: 30, submissions: 30, authors: 20 }, lineups: [{}], spirits: [{}], skills: [{}], ...over });
+  const now = { season: { id: 'S4', startsOn: '2026-09-10' } };
+  assert.deepEqual(RocoMeta.currentHot({ hot: hot() }, now), { status: 'ok', hot: hot(), small: false });
+  assert.equal(RocoMeta.currentHot({ hot: hot({ sample: { lineups: 3, submissions: 3, authors: 3 } }) }, now).small, true);
+  assert.equal(RocoMeta.currentHot({ hot: hot({ lineups: [], spirits: [], skills: [] }) }, now).status, 'empty');
+  // 换了赛季但统计还是上个赛季的：不能拿来当“当下”
+  const next = { season: { id: 'S5', startsOn: '2026-12-01' } };
+  assert.deepEqual(RocoMeta.currentHot({ hot: hot() }, next), { status: 'stale', hot: null, small: false });
+  assert.equal(RocoMeta.currentHot({ hot: { lineups: [], spirits: [], skills: [] } }, now).status, 'stale', 'an old meta.json without season info');
+  assert.equal(RocoMeta.currentHot({ hot: hot() }, null).status, 'ok', 'without season.json it trusts the season recorded in meta.json');
+  assert.equal(RocoMeta.currentHot(null, now).status, 'stale');
+});
+
 // ---- 新投稿系统监控 ----
 
 const newLineup = (fields) => ({ title: `阵容:${fields.id || 'x'}`, text: `{{阵容\n${Object.entries(fields).filter(([k]) => k !== 'id').map(([k, v]) => `|${k}=${v}`).join('\n')}\n}}` });
@@ -281,7 +347,7 @@ test('summarizeNewSystem on an empty system reports zero', () => {
 });
 
 test('buildMeta records the new-system summary only when it is given', () => {
-  const args = { skillsLua: skillsLua, skillsRevised: '2026-08-13T00:00:00Z', lineupPages: [], data: mini, now: '2026-09-29T00:00:00.000Z', urls: { site: 's', lineups: 'l', skills: 'k' } };
+  const args = { skillsLua: skillsLua, skillsRevised: '2026-08-13T00:00:00Z', lineupPages: [], data: mini, now: '2026-09-29T00:00:00.000Z', urls: { site: 's', lineups: 'l', skills: 'k' }, season: { id: 'S4', startsOn: '2026-09-10' } };
   assert.equal('newSystem' in lib.buildMeta(args).source, false);
   const summary = lib.summarizeNewSystem({});
   assert.deepEqual(lib.buildMeta({ ...args, newSystem: summary }).source.newSystem, summary);
@@ -351,7 +417,7 @@ test('meta.json never presents popularity as a usage rate', () => {
     }
   };
   walk(meta.hot);
-  for (const list of Object.values(meta.hot)) for (const row of list) for (const value of Object.values(row)) assert.ok(typeof value !== 'number' || Number.isInteger(value), 'counts are whole numbers, not ratios');
+  for (const list of [meta.hot.lineups, meta.hot.spirits, meta.hot.skills]) for (const row of list) for (const value of Object.values(row)) assert.ok(typeof value !== 'number' || Number.isInteger(value), 'counts are whole numbers, not ratios');
 });
 
 test('meta.json lineups reference real spirits and skills', () => {
@@ -396,7 +462,12 @@ test('meta.json skill table is usable by the engine', () => {
 
 test('meta.json hot lists point at real entries and are sorted by authors', () => {
   const { hot } = meta;
+  assert.ok(hot.season && hot.season.id && /^\d{4}-\d{2}-\d{2}$/.test(hot.season.startsOn), 'hot records which season it covers');
+  const inSeason = meta.lineups.filter(lineup => lineup.date >= hot.season.startsOn);
+  assert.equal(hot.sample.lineups, inSeason.length, 'sample size matches the lineups on or after the season start');
+  assert.equal(hot.sample.authors, new Set(inSeason.map(lineup => lineup.author)).size);
   for (const row of hot.lineups) {
+    assert.ok(meta.lineups[row.lineup].date >= hot.season.startsOn, 'hot lineups are current-season only');
     assert.ok(meta.lineups[row.lineup], `lineup index ${row.lineup}`);
     assert.ok(row.authors >= 1 && row.authors <= row.submissions);
     assert.ok(row.firstSubmitted <= row.lastSubmitted);

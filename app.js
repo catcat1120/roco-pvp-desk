@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'roco-pvp-desk-v1';
-const state = { data: null, meta: null, season: null, metaIndex: null, byName: new Map(), skillAuthors: new Map(), team: [], opponents: [], size: 6, tab: 'team', selected: null };
+const state = { data: null, meta: null, season: null, metaIndex: null, byName: new Map(), team: [], opponents: [], size: 6, tab: 'team', selected: null };
 const $ = (selector) => document.querySelector(selector);
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const allTypes = () => Object.keys(state.data.types);
@@ -52,9 +52,11 @@ function attackText(side) {
   const energy = `能量 ${RocoEngine.ENERGY_START} → ${side.energyLeft}`;
   if (side.basis !== 'skill') return `${escapeHTML(side.type)}系 ${side.mult}× · 使用${side.kind}（无投稿配招，按威力 ${RocoEngine.ASSUMED_POWER}、能耗 ${RocoEngine.ASSUMED_ENERGY} 的本系技能估算，${RocoEngine.WINDOW} 回合内${energy}）`;
   const skill = side.skill, build = side.build;
+  const season = state.season && state.season.season;
+  const older = season && build.date < season.startsOn ? `，早于 ${season.id} 开赛` : '';
   return `<b>${escapeHTML(skill.name)}</b>（主力）· ${escapeHTML(side.type || '无')}系 ${side.mult}× · ${side.kind}威力 ${skill.power}${skill.hits > 1 ? `×${skill.hits}连击` : ''}`
     + `<small class="cite">${RocoEngine.WINDOW} 回合内按能量限制的最优出招：${escapeHTML(planText(side.plan))}（${energy}）</small>`
-    + `<small class="cite">来自 BWIKI 玩家投稿的配招：${escapeHTML(build.skills.map(item => item.name).join('、'))}（${build.authors} 位作者 · 最近 ${escapeHTML(build.date)}）</small>`;
+    + `<small class="cite">来自 BWIKI 玩家投稿的配招：${escapeHTML(build.skills.map(item => item.name).join('、'))}（${build.authors} 位作者 · 最近 ${escapeHTML(build.date)}${escapeHTML(older)}）</small>`;
 }
 function renderDetail(team, foes) {
   const box = $('#match-detail');
@@ -144,29 +146,42 @@ function renderSeason() {
     +`<p class="provenance-note">${escapeHTML(data.note)}</p>`;
   box.hidden=false;
 }
+function hotStatus() { return RocoMeta.currentHot(state.meta, state.season); }
 function renderProvenance() {
   const m=state.meta, l=m.source.lineups, k=m.source.skills, age=RocoMeta.ageInDays(l.lastSubmitted);
-  const stale=age!==null && age>STALE_DAYS;
   const season=state.season&&state.season.season;
-  const beforeSeason=season&&l.lastSubmitted<season.startsOn;
   const skillsBefore=season&&k.revised<season.startsOn;
-  const fresh=m.source.newSystem;
-  $('#meta-source').innerHTML=`<div class="provenance-head"><span class="badge">社区推荐</span><strong>来源：<a href="${escapeHTML(safeUrl(m.source.lineups.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(m.source.name)}</a> 玩家阵容投稿</strong></div>`
+  const fresh=m.source.newSystem, status=hotStatus();
+  const sample=m.hot&&m.hot.sample, when=m.hot&&m.hot.season;
+  const current=status.status==='stale'
+    ?`统计尚未按 ${escapeHTML(season?season.id:'当前赛季')} 重新生成，暂不显示（定时刷新后自动更新）`
+    :`${sample.lineups} 份阵容 · ${plural(sample.authors)}（${escapeHTML(when.id)}，${escapeHTML(when.startsOn)} 起）`;
+  const newer=fresh?(fresh.lineups.real+fresh.builds.real>0?`BWIKI 新投稿系统（含适用版本）已有 ${fresh.lineups.real} 份阵容、${fresh.builds.real} 份培养方案，尚未接入`:'BWIKI 新投稿系统（含适用版本）暂无真实投稿，所以没有新赛季的阵容数据'):'';
+  const note=status.status==='empty'?` 当下数据为空，热门面板暂不显示：${escapeHTML(when.id)} 开赛前的旧投稿不算当下数据。`
+    :status.small?` 当下样本只有 ${sample.lineups} 份阵容，排名波动会很大，仅供参考。`:'';
+  $('#meta-source').innerHTML=`<div class="provenance-head"><span class="badge">社区推荐</span><strong>来源：<a href="${escapeHTML(safeUrl(l.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(m.source.name)}</a> 玩家阵容投稿 · 只统计当下赛季</strong></div>`
     +`<dl class="provenance-list">`
-    +`<div><dt>投稿样本</dt><dd>${l.pvp} 份 PvP 阵容 · ${plural(l.authors)}（同一作者重复保存的同一套阵容只算一次，去重后 ${l.submissions} 份）</dd></div>`
-    +`<div><dt>投稿日期</dt><dd>${escapeHTML(l.firstSubmitted)} 至 ${escapeHTML(l.lastSubmitted)}${age!==null?`（最近一份距今 ${age} 天）`:''}</dd></div>`
+    +`<div><dt>当下样本</dt><dd>${current}</dd></div>`
+    +(newer?`<div><dt>新版投稿</dt><dd>${newer}</dd></div>`:'')
+    +`<div><dt>旧投稿</dt><dd>${l.pvp} 份 · ${plural(l.authors)} · ${escapeHTML(l.firstSubmitted)} 至 ${escapeHTML(l.lastSubmitted)}${age!==null?`（最近一份距今 ${age} 天）`:''}；不参与热门，仅在对阵速查里估算配招，并标注日期</dd></div>`
     +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">BWIKI 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能${skillsBefore?`（早于 ${escapeHTML(season.id)} 开赛，${escapeHTML(season.id)} 新增的技能未收录）`:''}</dd></div>`
-    +(fresh?`<div><dt>新版投稿</dt><dd>${fresh.lineups.real+fresh.builds.real>0?`BWIKI 新投稿系统（含适用版本）已有 ${fresh.lineups.real} 份阵容、${fresh.builds.real} 份培养方案，尚未接入`:'BWIKI 新投稿系统（含适用版本）暂无真实投稿，所以没有新赛季的阵容数据'}</dd></div>`:'')
     +`<div><dt>数据生成</dt><dd>${escapeHTML(m.generatedAt.slice(0,10))}（定时抓取，内容有变化才更新）</dd></div></dl>`
-    +`<p class="provenance-note${stale?' stale':''}">${escapeHTML(m.notice)} 下面的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${beforeSeason?` 这些投稿全部早于 ${escapeHTML(season.id)} 开赛（${escapeHTML(season.startsOn)}），不反映当前赛季的环境。`:stale?' 最近一份投稿已是数月前，新赛季的调整不会体现在这里。':''}</p>`;
+    +`<p class="provenance-note${status.status==='ok'&&!status.small?'':' stale'}">${escapeHTML(m.notice)} 热门里的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${note}</p>`;
 }
 function spiritChip(member) {
   const spirit=metaSpirit(member.ref);
   return `<span class="chip${spirit?'':' unknown'}" title="${spirit?escapeHTML(typesText(spirit)):'资料库中没有这只精灵'}">${escapeHTML(member.name)}</span>`;
 }
+function emptyHot(what) {
+  const status=hotStatus(), season=state.season&&state.season.season, when=(state.meta&&state.meta.hot&&state.meta.hot.season)||season||{};
+  return status.status==='stale'
+    ?`<div class="empty">统计尚未按 ${escapeHTML(season?season.id:'当前赛季')} 重新生成，暂不显示${what}。</div>`
+    :`<div class="empty">${escapeHTML(when.id||'当前赛季')}${when.startsOn?`（${escapeHTML(when.startsOn)} 起）`:''}还没有可用的投稿数据，暂不显示${what}。旧赛季的投稿不算当下数据。</div>`;
+}
 function renderHotLineups() {
-  const m=state.meta;
-  $('#hot-lineups').innerHTML=m.hot.lineups.map(row=>{
+  const m=state.meta, hot=hotStatus().hot;
+  if (!hot||!hot.lineups.length) { $('#hot-lineups').innerHTML=emptyHot('热门配队'); return; }
+  $('#hot-lineups').innerHTML=hot.lineups.map(row=>{
     const lineup=m.lineups[row.lineup], title=RocoMeta.lineupTitle(lineup);
     const support=row.authors>1?`${plural(row.authors)}投稿了相近阵容（至少 4 只精灵相同）`:'仅 1 位作者投稿';
     const skills=lineup.members.map(member=>`<li><b>${escapeHTML(member.name)}</b>${member.skills.length?escapeHTML(member.skills.join('、')):'<em>未填写配招</em>'}</li>`).join('');
@@ -177,7 +192,9 @@ function renderHotLineups() {
   }).join('');
 }
 function renderHotSpirits() {
-  const list=state.meta.hot.spirits, top=Math.max(...list.map(row=>row.authors),1);
+  const hot=hotStatus().hot;
+  if (!hot||!hot.spirits.length) { $('#hot-spirits').innerHTML=emptyHot('热门精灵'); return; }
+  const list=hot.spirits, top=Math.max(...list.map(row=>row.authors),1);
   $('#hot-spirits').innerHTML=list.map((row,index)=>{
     const spirit=metaSpirit(row.ref);
     const common=row.topSkills.length?`常见配招：${escapeHTML(row.topSkills.map(skill=>`${skill.name}（${skill.authors}）`).join('、'))}`:'';
@@ -189,37 +206,42 @@ function renderHotSpirits() {
 function skillRow(name, skill, extra) {
   const cls=skill.category==='攻击'?skill.damageClass:skill.category;
   const power=skill.power?`威力 ${skill.power}${skill.hits>1?`×${skill.hits}`:''} · `:'';
-  const count=state.skillAuthors.get(name);
+  const count=extra&&extra.authors;
   const carriers=extra&&extra.carriers.length?`<p class="card-meta">常见携带：${escapeHTML(extra.carriers.map(item=>`${item.name}（${item.authors}）`).join('、'))}</p>`:'';
   return `<article class="skill-row"><header><h3>${escapeHTML(name)}</h3><span class="type-tag">${escapeHTML(skill.element?skill.element+'系':'无系')}</span><span class="type-tag plain">${escapeHTML(cls)}</span></header>`
-    +`<p class="card-meta">${power}能耗 ${skill.energy}${skill.refund?` · 自带回能 ${skill.refund}`:''}${count?` · ${plural(count)}收录`:''}</p><p class="skill-desc">${escapeHTML(skill.desc)}</p>${carriers}</article>`;
+    +`<p class="card-meta">${power}能耗 ${skill.energy}${skill.refund?` · 自带回能 ${skill.refund}`:''}${count?` · 当下 ${plural(count)}收录`:''}</p><p class="skill-desc">${escapeHTML(skill.desc)}</p>${carriers}</article>`;
 }
-function renderSkills() {
-  const m=state.meta, query=$('#skill-search').value.trim().toLowerCase();
-  const box=$('#hot-skills');
-  if (!query) {
-    box.innerHTML=m.hot.skills.filter(row=>m.skills[row.name]).map(row=>skillRow(row.name,m.skills[row.name],row)).join('');
-    return;
-  }
+function renderHotSkills() {
+  const m=state.meta, hot=hotStatus().hot;
+  const rows=hot?hot.skills.filter(row=>m.skills[row.name]):[];
+  $('#hot-skills').innerHTML=rows.length?rows.map(row=>skillRow(row.name,m.skills[row.name],row)).join(''):emptyHot('热门技能');
+}
+// 技能数据是参考资料（BWIKI 数据模块的快照），不含热度；有当下热门数据时才附上收录数。
+function renderSkillData() {
+  const m=state.meta, query=$('#skill-search').value.trim().toLowerCase(), box=$('#skill-data');
+  if (!query) { box.innerHTML='<div class="empty">输入技能名称、系别（如“火系”）、类别（物攻/魔攻/防御/状态）或效果关键词，查询威力、能耗与描述。</div>'; return; }
+  const rank=(name)=>name.toLowerCase()===query?0:name.toLowerCase().startsWith(query)?1:name.toLowerCase().includes(query)?2:3;
   const hits=Object.entries(m.skills).filter(([name,skill])=>{
     const element=skill.element?skill.element:'';
     return name.toLowerCase().includes(query)||skill.desc.toLowerCase().includes(query)||(element&&(query===element||query===element+'系'))||skill.category===query||skill.damageClass===query;
-  }).sort((a,b)=>(state.skillAuthors.get(b[0])||0)-(state.skillAuthors.get(a[0])||0)||a[0].localeCompare(b[0],'zh'));
-  const hot=new Map(m.hot.skills.map(row=>[row.name,row]));
-  box.innerHTML=hits.length?`<p class="card-meta result-note">共 ${hits.length} 个技能${hits.length>30?'，显示前 30 个':''}，按投稿收录数排序。</p>`+hits.slice(0,30).map(([name,skill])=>skillRow(name,skill,hot.get(name))).join(''):'<div class="empty">没有找到匹配的技能。</div>';
+  }).sort((a,b)=>rank(a[0])-rank(b[0])||a[0].localeCompare(b[0],'zh'));
+  const hot=hotStatus().hot, current=new Map(hot?hot.skills.map(row=>[row.name,row]):[]);
+  box.innerHTML=hits.length?`<p class="card-meta result-note">共 ${hits.length} 个技能${hits.length>30?'，显示前 30 个':''}。</p>`+hits.slice(0,30).map(([name,skill])=>skillRow(name,skill,current.get(name))).join(''):'<div class="empty">没有找到匹配的技能。</div>';
 }
 function renderMeta() {
   renderSeason();
   if (!state.meta) {
     $('#meta-source').innerHTML='<div class="empty">社区推荐数据暂时无法载入，其余功能不受影响。</div>';
-    for (const id of ['#hot-lineups','#hot-spirits','#hot-skills']) $(id).innerHTML='';
+    for (const id of ['#hot-lineups','#hot-spirits','#hot-skills','#skill-data']) $(id).innerHTML='';
     return;
   }
-  const l=state.meta.source.lineups, span=`BWIKI 投稿 ${l.firstSubmitted} 至 ${l.lastSubmitted}`;
-  $('#label-lineups').textContent=`${span} · 按投稿作者数排序`;
-  $('#label-spirits').textContent=`${span} · 按收录作者数排序`;
-  $('#label-skills').textContent=`${span} · 技能数据修订于 ${state.meta.source.skills.revised}`;
-  renderProvenance(); renderHotLineups(); renderHotSpirits(); renderSkills();
+  const status=hotStatus(), sample=state.meta.hot&&state.meta.hot.sample, when=state.meta.hot&&state.meta.hot.season;
+  const label=status.status==='stale'?'待重新统计':status.status==='empty'?`${when.id} 当下 · 暂无数据`:`${when.id} 当下 · ${sample.lineups} 份阵容 · ${sample.authors} 位作者`;
+  $('#label-lineups').textContent=`${label}${status.status==='ok'?' · 按投稿作者数排序':''}`;
+  $('#label-spirits').textContent=`${label}${status.status==='ok'?' · 按收录作者数排序':''}`;
+  $('#label-skills').textContent=label;
+  $('#label-skilldata').textContent=`BWIKI 技能图鉴 · 修订于 ${state.meta.source.skills.revised}`;
+  renderProvenance(); renderHotLineups(); renderHotSpirits(); renderHotSkills(); renderSkillData();
 }
 function loadLineup(kind,index) {
   const lineup=state.meta.lineups[index]; if(!lineup)return;
@@ -247,9 +269,6 @@ async function loadMeta() {
     const response=await fetch('./meta.json'); if(!response.ok)throw new Error('meta unavailable');
     const meta=await response.json(); if(meta.schema!==1)throw new Error('meta schema');
     state.meta=meta; state.metaIndex=RocoMeta.createIndex(meta,state.data);
-    const authors=new Map();
-    for (const lineup of meta.lineups) for (const member of lineup.members) for (const name of new Set(member.skills)) { if(!authors.has(name))authors.set(name,new Set()); authors.get(name).add(lineup.author); }
-    state.skillAuthors=new Map([...authors].map(([name,set])=>[name,set.size]));
   } catch(_) { state.meta=null; state.metaIndex=null; }
 }
 async function init() {
@@ -280,7 +299,7 @@ document.addEventListener('click',event=>{
 $('#tab-team').addEventListener('click',()=>setTab('team'));
 $('#tab-match').addEventListener('click',()=>setTab('match'));
 $('#tab-meta').addEventListener('click',()=>setTab('meta'));
-$('#skill-search').addEventListener('input',()=>{if(state.meta)renderSkills()});
+$('#skill-search').addEventListener('input',()=>{if(state.meta)renderSkillData()});
 $('#team-size').addEventListener('change',event=>{
   const next=Number(event.target.value);
   if(state.team.length>next || state.opponents.length>next){event.target.value=state.size;announce(`先将双方队伍各缩减到 ${next} 只，再切换规模。`,true);return;}

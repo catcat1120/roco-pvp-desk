@@ -187,10 +187,9 @@ const topCounts = (map, limit) => [...map.entries()]
 
 // 热门配队：一份阵容被多少位不同作者“独立投出了相近阵容”。逐对比较、不做传递合并，
 // 避免把不同打法链成一个大组。数字是投稿作者数，不是对局使用率。
-function rankLineups(lineups, unique) {
+function rankLineups(unique, indexOf) {
   const sets = unique.map(lineup => new Set(lineup.members.map(member => member.key)));
   const overlap = (a, b) => [...sets[a]].filter(key => sets[b].has(key)).length;
-  const index = new Map(lineups.map((lineup, i) => [lineup, i]));
   const rows = unique.map((lineup, i) => {
     const similar = unique.filter((other, j) => j === i || (other.author !== lineup.author && overlap(i, j) >= SIMILAR));
     const dates = similar.map(other => other.date).sort();
@@ -208,11 +207,12 @@ function rankLineups(lineups, unique) {
   }
   return picked.map((row, n) => ({
     rank: n + 1, authors: row.authors, submissions: row.submissions,
-    firstSubmitted: row.firstSubmitted, lastSubmitted: row.lastSubmitted, lineup: index.get(unique[row.i])
+    firstSubmitted: row.firstSubmitted, lastSubmitted: row.lastSubmitted, lineup: indexOf(unique[row.i])
   }));
 }
 
-function aggregate(lineups) {
+// lineups：参与统计的投稿；indexOf：某份投稿在 meta.lineups（全部投稿）里的下标，热门配队用它指回原投稿。
+function aggregate(lineups, indexOf = (lineup) => lineups.indexOf(lineup)) {
   // 同一作者反复保存同一套阵容，只算一次投稿，避免刷高数字。
   const seen = new Set();
   const unique = lineups.filter(lineup => {
@@ -237,7 +237,7 @@ function aggregate(lineups) {
   });
 
   return {
-    lineups: rankLineups(lineups, unique),
+    lineups: rankLineups(unique, indexOf),
     spirits: [...spirits.values()]
       .map(entry => ({
         name: [...entry.extra.names.entries()].sort((a, b) => b[1] - a[1] || compare(a[0], b[0]))[0][0],
@@ -257,7 +257,10 @@ function aggregate(lineups) {
 
 // ---- 组装 ----
 
-function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, newSystem }) {
+// season：{ id, startsOn }。热门配队/精灵/技能只统计 startsOn 当天及之后的投稿，即“当下”的数据；
+// 更早赛季的投稿仍保留在 lineups 里（对阵速查用它们估算配招，并标注日期），但不参与任何“热门”。
+function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, newSystem, season }) {
+  if (!season || !isoDate(season.startsOn) || !season.id) throw new Error('buildMeta 需要 season: { id, startsOn }');
   const skills = normalizeSkills(skillsLua);
   const resolve = createResolver(data);
   const parsed = lineupPages
@@ -288,7 +291,9 @@ function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, new
     ...lineup,
     members: lineup.members.map(member => ({ ...member, key: member.ref ?? `?${member.name}` }))
   }));
-  const hot = aggregate(keyed);
+  const position = new Map(keyed.map((lineup, i) => [lineup, i]));
+  const current = keyed.filter(lineup => lineup.date >= season.startsOn);
+  const hot = aggregate(current, (lineup) => position.get(lineup));
   const dates = lineups.map(lineup => lineup.date).sort();
   const unresolved = [...new Set(lineups.flatMap(lineup => lineup.members.filter(m => !m.ref).map(m => m.name)))].sort();
   const unknownSkills = [...new Set(lineups.flatMap(lineup => lineup.members.flatMap(m => m.skills)).filter(name => !skills[name]))].sort();
@@ -323,7 +328,11 @@ function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, new
     },
     skills,
     lineups,
-    hot: { lineups: hot.lineups, spirits: hot.spirits, skills: hot.skills }
+    hot: {
+      season: { id: season.id, startsOn: season.startsOn },
+      sample: { lineups: current.length, submissions: hot.uniqueSubmissions, authors: new Set(current.map(lineup => lineup.author)).size },
+      lineups: hot.lineups, spirits: hot.spirits, skills: hot.skills
+    }
   };
 }
 

@@ -45,7 +45,18 @@
     return Number.isNaN(then) ? null : Math.max(0, Math.floor((now.getTime() - then) / 86400000));
   }
 
-  const api = { createIndex, lineupTitle, ageInDays };
+  // “热门”只在按当前赛季统计时才可信：meta.hot 记录了它统计的赛季，和 season.json 的当前赛季对不上就不能用
+  // （比如换了赛季但刷新任务还没重新统计）。返回 { status: 'ok' | 'empty' | 'stale', hot, small }。
+  const SMALL_SAMPLE = 10;
+  function currentHot(meta, season) {
+    const hot = meta && meta.hot;
+    if (!hot || !hot.season || !hot.sample) return { status: 'stale', hot: null, small: false };
+    if (season && season.season && hot.season.startsOn !== season.season.startsOn) return { status: 'stale', hot: null, small: false };
+    const empty = !hot.lineups.length && !hot.spirits.length && !hot.skills.length;
+    return { status: empty ? 'empty' : 'ok', hot, small: !empty && hot.sample.lineups < SMALL_SAMPLE };
+  }
+
+  const api = { createIndex, lineupTitle, ageInDays, currentHot, SMALL_SAMPLE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RocoMeta = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
