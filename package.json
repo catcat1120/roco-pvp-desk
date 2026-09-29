@@ -1,0 +1,10 @@
+{
+  "name": "roco-pvp-desk",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "description": "洛克王国：世界 PvP 配队与对阵速查工具（玩家自制）",
+  "scripts": {
+    "test": "node --test",
+    "meta": "node scripts/build-meta.js"
+  }
+}

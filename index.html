@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1424'/%3E%3Cpath d='M13 34h38M32 13v38' stroke='%23d8f35b' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b1424' stroke='%23d8f35b' stroke-width='5'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
   <script defer src="./engine.js"></script>
+  <script defer src="./meta.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -19,8 +20,8 @@
     </header>
 
     <main>
-      <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">综合属性克制、速度先后手与物魔攻防，快速发现队伍缺口与危险对位。判断基于种族值估算，仅供赛前参考，实际结果还取决于技能、特性、个体与操作。</p></div>
-      <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
+      <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">综合属性克制、速度先后手、物魔攻防，以及社区投稿阵容里的常见配招，快速发现队伍缺口与危险对位。判断是估算，仅供赛前参考，实际结果还取决于特性、个体与操作。</p></div>
+      <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button><button role="tab" id="tab-meta" aria-selected="false" aria-controls="meta-view" type="button">社区推荐</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
 
       <div id="status" class="status" role="status" hidden></div>
       <section class="workspace" id="team-view" role="tabpanel" aria-labelledby="tab-team">
@@ -30,11 +31,20 @@
 
       <section class="workspace match-workspace" id="match-view" role="tabpanel" aria-labelledby="tab-match" hidden>
         <div class="panel roster-panel"><div class="panel-heading"><div><p class="section-kicker">对手阵容</p><h2>加入已知精灵</h2></div><span class="counter" id="opponent-count">0 / 6</span></div><div id="opponent-list" class="roster-list"></div><div class="picker"><label for="opponent-search">添加对手精灵</label><input id="opponent-search" type="search" placeholder="搜索精灵名称或编号" autocomplete="off" aria-controls="opponent-results"><div id="opponent-results" class="search-results" role="listbox" hidden></div></div><p class="panel-foot">不确定的对手位可以留空；先在“配队分析”中选好我方阵容。</p></div>
-        <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label">种族值估算 · 不含技能与特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-threats" class="threat-list"></div><div id="match-table" class="match-table-wrap"></div><div id="match-detail" class="match-detail" aria-live="polite"></div></div>
+        <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label" id="match-basis">种族值与配招估算 · 不含特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-threats" class="threat-list"></div><div id="match-table" class="match-table-wrap"></div><div id="match-detail" class="match-detail" aria-live="polite"></div></div>
+      </section>
+
+      <section class="meta-view" id="meta-view" role="tabpanel" aria-labelledby="tab-meta" hidden>
+        <div class="panel provenance" id="meta-source"></div>
+        <div class="meta-grid">
+          <div class="panel meta-panel"><div class="panel-heading"><div><p class="section-kicker">社区推荐</p><h2>热门配队</h2></div><span class="mini-label" id="label-lineups">BWIKI 投稿 · 按投稿作者数排序</span></div><div id="hot-lineups" class="meta-list"></div></div>
+          <div class="panel meta-panel"><div class="panel-heading"><div><p class="section-kicker">社区推荐</p><h2>热门精灵</h2></div><span class="mini-label" id="label-spirits">BWIKI 投稿 · 按收录作者数排序</span></div><div id="hot-spirits" class="meta-list"></div></div>
+          <div class="panel meta-panel"><div class="panel-heading"><div><p class="section-kicker">社区推荐</p><h2>热门技能</h2></div><span class="mini-label" id="label-skills">BWIKI 投稿与技能数据</span></div><div class="picker skill-search"><label for="skill-search">查询技能数据</label><input id="skill-search" type="search" placeholder="技能名称、系别或效果，如“冻结”" autocomplete="off"></div><div id="hot-skills" class="meta-list"></div></div>
+        </div>
       </section>
     </main>
 
-    <footer><span>玩家自制工具，与游戏官方无关联。</span><span>精灵与属性资料参考 <a href="https://github.com/s422346963/RokePvP-Calculator" target="_blank" rel="noopener noreferrer">RokePvP-Calculator</a>；请以游戏内当前版本为准。</span></footer>
+    <footer><span>玩家自制工具，与游戏官方无关联。</span><span>精灵与属性资料参考 <a href="https://github.com/s422346963/RokePvP-Calculator" target="_blank" rel="noopener noreferrer">RokePvP-Calculator</a>；社区推荐与技能数据来自 <a href="https://wiki.biligame.com/rocom/" target="_blank" rel="noopener noreferrer">洛克王国 BWIKI</a> 玩家投稿（版权归原作者与来源方所有）；请以游戏内当前版本为准。</span></footer>
   </div>
 </body>
 </html>
