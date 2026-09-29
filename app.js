@@ -43,10 +43,18 @@ function renderThreats(team, foes) {
     : '<div class="empty threat-clear">每个对手都至少有一只我方精灵占优。</div>';
 }
 const BASIS_TEXT = { skill: '双方都按社区投稿配招里的真实技能估算', mixed: '只有一方有社区投稿配招，另一方按属性估算', type: '双方都没有投稿配招，只按属性与种族值估算' };
+function planText(plan) {
+  const groups = new Map();
+  for (const step of plan) { const group = groups.get(step.name) || { step, count: 0 }; group.count += 1; groups.set(step.name, group); }
+  return [...groups.values()].map(({ step, count }) => `${step.name}（能耗 ${step.energy}${step.refund ? `，回 ${step.refund}` : ''}）${count > 1 ? `×${count}` : ''}`).join('、');
+}
 function attackText(side) {
-  if (side.basis !== 'skill') return `${escapeHTML(side.type)}系 ${side.mult}× · 使用${side.kind}（无投稿配招，按威力 ${RocoEngine.ASSUMED_POWER} 的本系技能估算）`;
+  const energy = `能量 ${RocoEngine.ENERGY_START} → ${side.energyLeft}`;
+  if (side.basis !== 'skill') return `${escapeHTML(side.type)}系 ${side.mult}× · 使用${side.kind}（无投稿配招，按威力 ${RocoEngine.ASSUMED_POWER}、能耗 ${RocoEngine.ASSUMED_ENERGY} 的本系技能估算，${RocoEngine.WINDOW} 回合内${energy}）`;
   const skill = side.skill, build = side.build;
-  return `<b>${escapeHTML(skill.name)}</b> · ${escapeHTML(side.type || '无')}系 ${side.mult}× · ${side.kind}威力 ${skill.power}${skill.hits > 1 ? `×${skill.hits}连击` : ''} · 能耗 ${skill.energy}<small class="cite">来自 BWIKI 玩家投稿的配招：${escapeHTML(build.skills.map(item => item.name).join('、'))}（${build.authors} 位作者 · 最近 ${escapeHTML(build.date)}）</small>`;
+  return `<b>${escapeHTML(skill.name)}</b>（主力）· ${escapeHTML(side.type || '无')}系 ${side.mult}× · ${side.kind}威力 ${skill.power}${skill.hits > 1 ? `×${skill.hits}连击` : ''}`
+    + `<small class="cite">${RocoEngine.WINDOW} 回合内按能量限制的最优出招：${escapeHTML(planText(side.plan))}（${energy}）</small>`
+    + `<small class="cite">来自 BWIKI 玩家投稿的配招：${escapeHTML(build.skills.map(item => item.name).join('、'))}（${build.authors} 位作者 · 最近 ${escapeHTML(build.date)}）</small>`;
 }
 function renderDetail(team, foes) {
   const box = $('#match-detail');
@@ -59,11 +67,11 @@ function renderDetail(team, foes) {
     + line('速度', `${d.speed.ours} 对 ${d.speed.theirs}，我方${firstText(d)}${d.first === 'tie' ? '' : `（估算给先手方 ${Math.round((RocoEngine.SPEED_EDGE - 1) * 100)}% 加成）`}`)
     + line('我方输出', attackText(d.out))
     + line('对方输出', attackText(d.back))
-    + line('攻防对比', `压制力比 ${fmt(d.race)}×（已计入技能威力、属性克制、攻防种族值与生命）`)
+    + line('攻防对比', `压制力比 ${fmt(d.race)}×（${RocoEngine.WINDOW} 回合内的累计输出比，已计入技能威力、属性克制、攻防种族值、生命与能量）`)
     + line('判断依据', BASIS_TEXT[d.basis])
     + line('我方种族值', escapeHTML(statLine(ours)))
     + line('对方种族值', escapeHTML(statLine(theirs)))
-    + line('未计入', '本系加成、能耗与追加效果、特性、个体值与血脉')
+    + line('未计入', '本系加成、减耗与追加效果、特性、个体值与血脉；能量按初始 10、上限 10、不自动回复估算')
     + line('特性',  `${escapeHTML(ours.trait || '—')} ／ ${escapeHTML(theirs.trait || '—')}`)
     + '</dl>';
 }
@@ -73,7 +81,7 @@ function renderMatch() {
     $('#match-summary').textContent = !team.length ? '先在“配队分析”中加入我方精灵。' : '加入对手精灵后，这里会显示逐只对位判断。';
     $('#match-table').innerHTML = ''; $('#match-threats').innerHTML = ''; $('#match-detail').innerHTML = ''; return;
   }
-  $('#match-summary').textContent = `${team.length} 只我方精灵 × ${foes.length} 只对手精灵；综合技能威力、属性克制、先后手与物魔攻防估算，绿色表示较有利，红色表示需谨慎。◆ 双方按社区投稿配招估算，◇ 仅一方有配招，无标记为按属性估算。未计特性、个体与场地。`;
+  $('#match-summary').textContent = `${team.length} 只我方精灵 × ${foes.length} 只对手精灵；综合技能威力与能耗、属性克制、先后手与物魔攻防，估算各自 ${RocoEngine.WINDOW} 回合内的输出，绿色表示较有利，红色表示需谨慎。◆ 双方按社区投稿配招估算，◇ 仅一方有配招，无标记为按属性估算。未计特性、个体与场地。`;
   $('#match-basis').textContent = state.metaIndex ? '种族值与社区配招估算 · 不含特性' : '种族值估算 · 不含技能与特性';
   renderThreats(team, foes);
   $('#match-table').innerHTML = `<table class="match-table"><thead><tr><th scope="col">我方 ↓ / 对手 →</th>${foes.map(f=>`<th scope="col" title="${escapeHTML(f.name)}">${escapeHTML(f.name)}</th>`).join('')}</tr></thead><tbody>${team.map(o=>`<tr><th scope="row" title="${escapeHTML(o.name)}">${escapeHTML(o.name)}</th>${foes.map(f=>{const d=RocoEngine.analyzeDuel(state.data.types,o,f,kitOf);const mark=d.basis==='skill'?'◆ ':d.basis==='mixed'?'◇ ':'';const on=state.selected&&state.selected.o===o.id&&state.selected.f===f.id;return `<td class="${d.className}${on?' selected':''}"><button type="button" class="cell-button" data-o="${o.id}" data-f="${f.id}" aria-pressed="${on}" title="${escapeHTML(o.name)} 对 ${escapeHTML(f.name)}：${firstText(d)}，综合 ${fmt(d.score)}×（${BASIS_TEXT[d.basis]}）">${d.label}<small>${mark}${firstText(d)} · ${fmt(d.score)}×</small></button></td>`}).join('')}</tr>`).join('')}</tbody></table>`;
@@ -165,7 +173,7 @@ function skillRow(name, skill, extra) {
   const count=state.skillAuthors.get(name);
   const carriers=extra&&extra.carriers.length?`<p class="card-meta">常见携带：${escapeHTML(extra.carriers.map(item=>`${item.name}（${item.authors}）`).join('、'))}</p>`:'';
   return `<article class="skill-row"><header><h3>${escapeHTML(name)}</h3><span class="type-tag">${escapeHTML(skill.element?skill.element+'系':'无系')}</span><span class="type-tag plain">${escapeHTML(cls)}</span></header>`
-    +`<p class="card-meta">${power}能耗 ${skill.energy}${count?` · ${plural(count)}收录`:''}</p><p class="skill-desc">${escapeHTML(skill.desc)}</p>${carriers}</article>`;
+    +`<p class="card-meta">${power}能耗 ${skill.energy}${skill.refund?` · 自带回能 ${skill.refund}`:''}${count?` · ${plural(count)}收录`:''}</p><p class="skill-desc">${escapeHTML(skill.desc)}</p>${carriers}</article>`;
 }
 function renderSkills() {
   const m=state.meta, query=$('#skill-search').value.trim().toLowerCase();

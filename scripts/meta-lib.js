@@ -28,6 +28,25 @@ function isoDate(value) {
 
 // ---- 技能 ----
 
+// 技能自带的回能：只认“固定数值、无条件、回给自己”的写法。有条件（若/每有/应对/击败后）、
+// 回给别人（场下/替换入场/敌方）、数值随场面变化（回复值等于…、回复该技能能耗）的一律不算，宁可少算。
+// 条件写在前一个分句时（“若…击败敌方，回复6能量”），同一句里后面的分句都受它约束。
+const CONDITION = /若|每有|应对|使用后|击败/;
+const NOT_SELF = /场下|替换|敌方|偷取|失去|回复值|该技能/;
+function parseSelfRefund(desc) {
+  let total = 0;
+  for (const sentence of String(desc || '').split('。')) {
+    let conditional = false;
+    for (const clause of sentence.split(/[，；]/)) {
+      if (CONDITION.test(clause)) conditional = true;
+      if (conditional || NOT_SELF.test(clause)) continue;
+      const match = /回复[^，；]*?(\d+)能量/.exec(clause);
+      if (match) total += Number(match[1]);
+    }
+  }
+  return total;
+}
+
 function normalizeSkills(luaSource) {
   const table = parseLuaTable(luaSource);
   const skills = {};
@@ -42,6 +61,7 @@ function normalizeSkills(luaSource) {
       power: Number(raw.power) || 0,
       hits,
       energy: Number(raw.energy) || 0,
+      refund: parseSelfRefund(raw.desc),
       target: raw.target || '',
       desc: clean(raw.desc)
     };
@@ -307,4 +327,4 @@ function serialize(value, depth = 0) {
   return items.length ? `${Array.isArray(value) ? '[' : '{'}\n${items.join(',\n')}\n${' '.repeat(depth)}${Array.isArray(value) ? ']' : '}'}` : (Array.isArray(value) ? '[]' : '{}');
 }
 
-module.exports = { buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };
+module.exports = { parseSelfRefund, buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };

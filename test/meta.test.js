@@ -40,10 +40,35 @@ const skillsLua = `return {
 test('normalizeSkills keeps battle skills, drops traits and cleans fields', () => {
   const skills = lib.normalizeSkills(skillsLua);
   assert.deepEqual(Object.keys(skills), ['连环火', '毒雾', '防御']);
-  assert.deepEqual(skills['连环火'], { element: '火', category: '攻击', damageClass: '物攻', power: 30, hits: 3, energy: 2, target: '敌方随机单体', desc: '造成物伤，3连击。' });
+  assert.deepEqual(skills['连环火'], { element: '火', category: '攻击', damageClass: '物攻', power: 30, hits: 3, energy: 2, refund: 0, target: '敌方随机单体', desc: '造成物伤，3连击。' });
   assert.equal(skills['毒雾'].element, null);
   assert.equal(skills['毒雾'].desc, '敌方获得 中毒。');
   assert.equal(skills['防御'].hits, 1);
+});
+
+test('parseSelfRefund counts only fixed, unconditional, self-directed energy', () => {
+  const refund = lib.parseSelfRefund;
+  assert.equal(refund('造成物伤，自己回复1能量。'), 1);
+  assert.equal(refund('自己回复10能量。'), 10);
+  assert.equal(refund('自己回复15%生命和4能量。'), 4, 'life and energy in one clause');
+  assert.equal(refund('选择：自己回复25%生命或回复8能量。'), 8);
+  assert.equal(refund('自己回复2能量，己方队伍获得1次奉献：能耗-2。'), 2);
+  // 条件、他人、随场面变化的一律不算
+  assert.equal(refund('造成物伤，若使用本技能击败敌方，回复6能量。'), 0, 'condition in the previous clause');
+  assert.equal(refund('造成物伤，敌方每有1层冻结，自己回复1能量。'), 0);
+  assert.equal(refund('造成物伤，应对状态：自己回复50%生命和5能量。'), 0);
+  assert.equal(refund('减伤80%，应对攻击：回复3能量。'), 0);
+  assert.equal(refund('造成魔伤，为场下所有精灵回复1能量。'), 0);
+  assert.equal(refund('自己脱离，替换入场的精灵回复8能量。'), 0);
+  assert.equal(refund('回复能量，回复值等于敌方技能总能耗的一半。'), 0);
+  assert.equal(refund('敌方失去3能量。'), 0);
+  assert.equal(refund(''), 0);
+});
+
+test('every skill with a refund in meta.json really mentions energy recovery', () => {
+  const refunding = Object.entries(meta.skills).filter(([, skill]) => skill.refund > 0);
+  assert.ok(refunding.length >= 10);
+  for (const [name, skill] of refunding) assert.match(skill.desc, /回复.*能量/, name);
 });
 
 // ---- 阵容页面 ----

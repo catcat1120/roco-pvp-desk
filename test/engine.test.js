@@ -163,6 +163,99 @@ test('analyzeTeam passes kits through', () => {
   assert.equal(row.best.duel.basis, 'skill');
 });
 
+// ---- 能量：初始 10、上限 10、不自动回复 ----
+
+const near = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-9 * Math.max(1, Math.abs(b)), `${message || ''} ${a} vs ${b}`);
+const neutral = () => [mock(['普通'], {}), mock(['普通'], {})];
+const hitOf = (power, energy, extra = {}) => ({ ...skill('普通', '物攻', power, { energy }), ...extra });
+const planOf = (skills) => {
+  const [ours, theirs] = neutral();
+  return engine.analyzeDuel(data.types, ours, theirs, (s) => (s === ours ? kit(...skills) : null)).out;
+};
+const unit = (() => { const [o, t] = neutral(); return engine.analyzeDuel(data.types, o, t, (s) => (s === o ? kit(hitOf(1, 0)) : null)).out.share / engine.WINDOW; })();
+
+test('energy rules: 10 to start, capped at 10, no automatic regeneration', () => {
+  assert.equal(engine.ENERGY_START, 10);
+  assert.equal(engine.ENERGY_CAP, 10);
+});
+
+test('free skills can be used every round', () => {
+  const out = planOf([hitOf(50, 0)]);
+  near(out.share, 50 * unit * engine.WINDOW);
+  assert.equal(out.plan.length, engine.WINDOW);
+});
+
+test('a skill that costs more than the remaining energy cannot be used', () => {
+  const out = planOf([hitOf(100, 4)]);
+  assert.equal(out.plan.length, 2, '4 + 4 = 8 fits, a third cast needs 12');
+  near(out.share, 100 * unit * 2);
+  assert.equal(out.energyLeft, 2);
+});
+
+test('a skill costing more than the whole energy cap never fires and falls back to the type estimate', () => {
+  const out = planOf([hitOf(300, 30)]);
+  assert.equal(out.basis, 'type', 'no usable attack, so the assumed skill is used instead');
+});
+
+test('an expensive nuke loses to a cheaper skill once energy is counted', () => {
+  const nuke = planOf([hitOf(140, 8)]);
+  const steady = planOf([hitOf(90, 3)]);
+  assert.equal(nuke.plan.length, 1);
+  assert.equal(steady.plan.length, 3);
+  assert.ok(steady.share > nuke.share, 'three 90-power hits beat one 140-power hit');
+});
+
+test('the planner mixes cheap and expensive skills to spend the pool well', () => {
+  const out = planOf([hitOf(140, 8), hitOf(40, 1)]);
+  assert.deepEqual(out.plan.map(step => step.name).sort(), ['普通140', '普通40', '普通40'], 'order among equal totals is not meaningful');
+  near(out.share, (140 + 40 + 40) * unit);
+});
+
+test('self-refunding skills sustain a spirit past its starting pool', () => {
+  const plain = planOf([hitOf(60, 4)]);
+  const refunding = planOf([hitOf(60, 4, { refund: 4 })]);
+  assert.equal(plain.plan.length, 2);
+  assert.equal(refunding.plan.length, engine.WINDOW);
+  assert.ok(refunding.share > plain.share);
+});
+
+test('an energy-restoring status skill is planned when it unlocks more damage', () => {
+  const refuel = { name: '徒长', element: '草', category: '状态', damageClass: null, power: 0, hits: 1, energy: 2, refund: 10 };
+  const withRefuel = planOf([hitOf(140, 8), refuel]);
+  assert.deepEqual(withRefuel.plan.map(step => step.name), ['普通140', '徒长', '普通140']);
+  near(withRefuel.share, 280 * unit);
+  assert.equal(withRefuel.plan[1].attack, false);
+  assert.ok(withRefuel.share > planOf([hitOf(140, 8)]).share);
+});
+
+test('energy never exceeds the cap even when a refund would overflow it', () => {
+  const refuel = { name: '徒长', element: '草', category: '状态', damageClass: null, power: 0, hits: 1, energy: 0, refund: 10 };
+  const out = planOf([hitOf(50, 5), refuel]);
+  assert.ok(out.energyLeft <= engine.ENERGY_CAP);
+});
+
+test('among equal-damage plans the one that keeps more energy wins', () => {
+  const out = planOf([hitOf(50, 0), hitOf(50, 3)]);
+  assert.equal(out.energyLeft, engine.ENERGY_START);
+  assert.deepEqual(out.plan.map(step => step.energy), [0, 0, 0]);
+});
+
+test('the type-based fallback is also energy-limited and comparable to skill plans', () => {
+  const [ours, theirs] = neutral();
+  const fallback = engine.analyzeDuel(data.types, ours, theirs).out;
+  assert.equal(fallback.basis, 'type');
+  assert.equal(fallback.energyLeft, engine.ENERGY_START - engine.ASSUMED_ENERGY * engine.WINDOW);
+  const explicit = planOf([hitOf(engine.ASSUMED_POWER, engine.ASSUMED_ENERGY)]);
+  near(fallback.share, explicit.share, 'assumed skill == an explicit 75-power, 3-energy skill');
+});
+
+test('ASSUMED_ENERGY stays close to the median attack energy in meta.json', () => {
+  const meta = require('../meta.json');
+  const costs = Object.values(meta.skills).filter(s => s.category === '攻击').map(s => s.energy).sort((a, b) => a - b);
+  const median = costs[costs.length >> 1];
+  assert.ok(Math.abs(median - engine.ASSUMED_ENERGY) <= 1, `median is now ${median}; update ASSUMED_ENERGY`);
+});
+
 test('ASSUMED_POWER stays close to the median attack power in meta.json', () => {
   // 只做健全性检查：定时刷新新增技能会让中位数小幅漂移，不应因此卡住刷新；漂移很大才提醒人工调整。
   const meta = require('../meta.json');
