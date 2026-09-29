@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1424">
+  <meta name="description" content="洛克王国：世界玩家自制的 PvP 配队与对阵速查工具。">
+  <title>洛克 PvP 配队速查</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1424'/%3E%3Cpath d='M13 34h38M32 13v38' stroke='%23d8f35b' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b1424' stroke='%23d8f35b' stroke-width='5'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>洛克 PvP</strong><span>配队速查</span></div></div>
+      <div class="top-actions"><span class="data-tag" id="data-tag">资料加载中</span><input id="import-file" type="file" accept="application/json,.json" hidden><button class="ghost-button" id="import-button" type="button">导入队伍</button><button class="ghost-button" id="export-button" type="button">导出队伍</button></div>
+    </header>
+
+    <main>
+      <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">按属性快速发现队伍缺口与危险对位。判断仅供赛前参考，实际结果还取决于技能、特性与操作。</p></div>
+      <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
+
+      <div id="status" class="status" role="status" hidden></div>
+      <section class="workspace" id="team-view" role="tabpanel" aria-labelledby="tab-team">
+        <div class="panel roster-panel"><div class="panel-heading"><div><p class="section-kicker">我方阵容</p><h2>选择出战精灵</h2></div><span class="counter" id="team-count">0 / 6</span></div><div id="team-list" class="roster-list"></div><div class="picker"><label for="team-search">添加精灵</label><input id="team-search" type="search" placeholder="搜索精灵名称或编号" autocomplete="off" aria-controls="team-results"><div id="team-results" class="search-results" role="listbox" hidden></div></div><p class="panel-foot">队伍只保存在当前浏览器，可用右上角导出或恢复。</p></div>
+        <div class="analysis-stack"><div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">队伍体检</p><h2>属性覆盖</h2></div><span class="mini-label">本系推算</span></div><div id="coverage-summary" class="metric-row"></div><div id="coverage-grid" class="type-grid"></div></div><div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">防守提醒</p><h2>共同弱点</h2></div></div><div id="weakness-list" class="weakness-list"></div></div></div>
+      </section>
+
+      <section class="workspace match-workspace" id="match-view" role="tabpanel" aria-labelledby="tab-match" hidden>
+        <div class="panel roster-panel"><div class="panel-heading"><div><p class="section-kicker">对手阵容</p><h2>加入已知精灵</h2></div><span class="counter" id="opponent-count">0 / 6</span></div><div id="opponent-list" class="roster-list"></div><div class="picker"><label for="opponent-search">添加对手精灵</label><input id="opponent-search" type="search" placeholder="搜索精灵名称或编号" autocomplete="off" aria-controls="opponent-results"><div id="opponent-results" class="search-results" role="listbox" hidden></div></div><p class="panel-foot">不确定的对手位可以留空；先在“配队分析”中选好我方阵容。</p></div>
+        <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label">不含技能与特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-table" class="match-table-wrap"></div></div>
+      </section>
+    </main>
+
+    <footer><span>玩家自制工具，与游戏官方无关联。</span><span>精灵与属性资料参考 <a href="https://github.com/s422346963/RokePvP-Calculator" target="_blank" rel="noopener noreferrer">RokePvP-Calculator</a>；请以游戏内当前版本为准。</span></footer>
+  </div>
+</body>
+</html>
