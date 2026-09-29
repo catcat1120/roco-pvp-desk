@@ -8,6 +8,7 @@
   <title>洛克 PvP 配队速查</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1424'/%3E%3Cpath d='M13 34h38M32 13v38' stroke='%23d8f35b' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b1424' stroke='%23d8f35b' stroke-width='5'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
+  <script defer src="./engine.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -18,7 +19,7 @@
     </header>
 
     <main>
-      <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">按属性快速发现队伍缺口与危险对位。判断仅供赛前参考，实际结果还取决于技能、特性与操作。</p></div>
+      <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">综合属性克制、速度先后手与物魔攻防，快速发现队伍缺口与危险对位。判断基于种族值估算，仅供赛前参考，实际结果还取决于技能、特性、个体与操作。</p></div>
       <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
 
       <div id="status" class="status" role="status" hidden></div>
@@ -29,7 +30,7 @@
 
       <section class="workspace match-workspace" id="match-view" role="tabpanel" aria-labelledby="tab-match" hidden>
         <div class="panel roster-panel"><div class="panel-heading"><div><p class="section-kicker">对手阵容</p><h2>加入已知精灵</h2></div><span class="counter" id="opponent-count">0 / 6</span></div><div id="opponent-list" class="roster-list"></div><div class="picker"><label for="opponent-search">添加对手精灵</label><input id="opponent-search" type="search" placeholder="搜索精灵名称或编号" autocomplete="off" aria-controls="opponent-results"><div id="opponent-results" class="search-results" role="listbox" hidden></div></div><p class="panel-foot">不确定的对手位可以留空；先在“配队分析”中选好我方阵容。</p></div>
-        <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label">不含技能与特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-table" class="match-table-wrap"></div></div>
+        <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label">种族值估算 · 不含技能与特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-threats" class="threat-list"></div><div id="match-table" class="match-table-wrap"></div><div id="match-detail" class="match-detail" aria-live="polite"></div></div>
       </section>
     </main>
 
