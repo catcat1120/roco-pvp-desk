@@ -69,6 +69,101 @@ function normalizeSkills(luaSource) {
   return skills;
 }
 
+// ---- 赛季调整（数据日志）----
+
+// BWIKI「洛克王国世界WIKI」的 模块:Pets/data/History 按精灵记录每个数据版本的前后对比（s4-2026-09-10 等）。
+// 这是游戏数据的差异，不是官方公告原文，机制类调整可能没有覆盖；这里只整理种族值、技能数值、特性文字和新增精灵。
+const SKILL_ASPECTS = ['威力', '能耗', '说明', '连击数', '连击'];
+
+function splitSkillField(field, skillNames) {
+  const aspect = SKILL_ASPECTS.find(suffix => field.endsWith(suffix));
+  const name = aspect ? field.slice(0, -aspect.length) : field;
+  return skillNames.has(name) ? { name, aspect } : { name: field, aspect: '' };
+}
+
+function buildSeasonChanges({ historyLua, catalogLua, skills, data, season, source }) {
+  const history = parseLuaTable(historyLua);
+  const catalog = parseLuaTable(catalogLua);
+  const versions = Object.entries(history.versions || {})
+    .filter(([, version]) => version.season === season.id)
+    .map(([id, version]) => ({ id, date: version.date, label: version.label }))
+    .sort((a, b) => compare(a.date, b.date));
+  if (!versions.length) return null;
+  const dateOf = new Map(versions.map(version => [version.id, version.date]));
+  const counts = new Map(versions.map(version => [version.id, { pets: new Set(), stats: 0, skills: 0, features: 0, introduced: 0 }]));
+  const skillNames = new Set(Object.keys(skills));
+  const resolve = createResolver(data);
+  const refOf = (name) => { const hit = resolve(name); return hit ? hit.spirit.name : null; };
+
+  const newSpirits = new Map(), stats = [], skillChanges = new Map(), features = new Map(), learned = { skills: new Set(), spirits: new Set() };
+  for (const [petId, raw] of Object.entries(history.pets || {})) {
+    const name = catalog[petId] && catalog[petId].name;
+    if (!name) continue;
+    for (const entry of Array.isArray(raw) ? raw : Object.values(raw)) {
+      const date = dateOf.get(entry.version);
+      if (!date) continue;
+      const count = counts.get(entry.version);
+      count.pets.add(petId);
+      if (entry.kind === 'introduced') { // 新增的精灵或形态记录：初始值不算“调整”
+        count.introduced += 1;
+        if (!newSpirits.has(name)) newSpirits.set(name, { name, ref: refOf(name), date });
+        continue;
+      }
+      const petStats = [];
+      for (const change of entry.changes || []) {
+        if (change.group === 'stats' && change.field) {
+          petStats.push({ field: change.field, before: change.before, after: change.after });
+        } else if (change.group === 'skill' && change.field) {
+          const { name: skill, aspect } = splitSkillField(change.field, skillNames);
+          const key = [skill, aspect, change.before, change.after, entry.version].join('|');
+          const row = skillChanges.get(key) || { name: skill, aspect, before: change.before, after: change.after, spirits: 0, date };
+          row.spirits += 1; skillChanges.set(key, row);
+        } else if (change.group === 'feature' && change.field) {
+          const key = [change.before, change.after, entry.version].join('|');
+          const row = features.get(key) || { names: [], before: change.before, after: change.after, date };
+          row.names.push(name); features.set(key, row);
+        } else if (change.group === 'learnset' && change.action === 'added') {
+          learned.skills.add(change.name); learned.spirits.add(petId);
+        }
+      }
+      if (petStats.length) { stats.push({ name, ref: refOf(name), date, changes: petStats }); count.stats += petStats.length; }
+    }
+  }
+  for (const row of skillChanges.values()) counts.get([...dateOf].find(([, d]) => d === row.date)[0]).skills += 1;
+  for (const row of features.values()) counts.get([...dateOf].find(([, d]) => d === row.date)[0]).features += row.names.length;
+
+  // 对阵速查用的是 data.json 里的种族值：核对日志里每只精灵每项的最新数值是否和它一致。
+  const KEY = { 生命: 'hp', 物攻: 'pa', 魔攻: 'ma', 物防: 'pd', 魔防: 'md', 速度: 'sp' };
+  const latest = new Map();
+  for (const spirit of [...stats].sort((a, b) => compare(a.date, b.date))) {
+    if (!spirit.ref) continue;
+    for (const change of spirit.changes) if (KEY[change.field]) latest.set(`${spirit.ref}|${change.field}`, change.after);
+  }
+  const byName = new Map(data.spirits.map(spirit => [spirit.name, spirit]));
+  const mismatched = [];
+  for (const [key, expected] of latest) {
+    const [name, field] = key.split('|');
+    const actual = byName.get(name).stats[KEY[field]];
+    if (actual !== expected) mismatched.push({ name, field, expected, actual });
+  }
+
+  const size = (spirit) => spirit.changes.reduce((sum, change) => sum + Math.abs((Number(change.after) || 0) - (Number(change.before) || 0)), 0);
+  return {
+    season: season.id,
+    source: { ...source, revised: isoDate(source.revised) },
+    versions: versions.map(version => {
+      const count = counts.get(version.id);
+      return { ...version, spirits: count.pets.size, stats: count.stats, skills: count.skills, features: count.features, introduced: count.introduced };
+    }),
+    newSpirits: [...newSpirits.values()].sort((a, b) => compare(a.name, b.name)),
+    stats: stats.sort((a, b) => size(b) - size(a) || compare(a.name, b.name)),
+    skills: [...skillChanges.values()].sort((a, b) => compare(a.name, b.name) || compare(a.aspect, b.aspect)),
+    features: [...features.values()].map(row => ({ ...row, names: [...new Set(row.names)].sort() })).sort((a, b) => b.names.length - a.names.length || compare(a.before, b.before)),
+    learned: { skills: learned.skills.size, spirits: learned.spirits.size },
+    dataCheck: { checked: latest.size, matching: latest.size - mismatched.length, mismatched: mismatched.slice(0, 20) }
+  };
+}
+
 // ---- 阵容 ----
 
 // 模板参数：`|键=值` 一行一个，值可以跨行。
@@ -259,7 +354,7 @@ function aggregate(lineups, indexOf = (lineup) => lineups.indexOf(lineup)) {
 
 // season：{ id, startsOn }。热门配队/精灵/技能只统计 startsOn 当天及之后的投稿，即“当下”的数据；
 // 更早赛季的投稿仍保留在 lineups 里（对阵速查用它们估算配招，并标注日期），但不参与任何“热门”。
-function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, newSystem, season }) {
+function buildMeta({ skillsLua, skillsRevised, skillsInfo, lineupPages, data, now, urls, newSystem, season, changes }) {
   if (!season || !isoDate(season.startsOn) || !season.id) throw new Error('buildMeta 需要 season: { id, startsOn }');
   const skills = normalizeSkills(skillsLua);
   const resolve = createResolver(data);
@@ -320,12 +415,14 @@ function buildMeta({ skillsLua, skillsRevised, lineupPages, data, now, urls, new
       },
       skills: {
         url: urls.skills,
-        module: '模块:PetDexData/Skills',
+        name: (skillsInfo && skillsInfo.name) || '洛克王国 BWIKI',
+        module: (skillsInfo && skillsInfo.module) || '模块:PetDexData/Skills',
         revised: isoDate(skillsRevised),
         count: Object.keys(skills).length
       },
       ...(newSystem ? { newSystem } : {})
     },
+    ...(changes ? { changes } : {}),
     skills,
     lineups,
     hot: {
@@ -371,4 +468,4 @@ function serialize(value, depth = 0) {
   return items.length ? `${Array.isArray(value) ? '[' : '{'}\n${items.join(',\n')}\n${' '.repeat(depth)}${Array.isArray(value) ? ']' : '}'}` : (Array.isArray(value) ? '[]' : '{}');
 }
 
-module.exports = { parseSelfRefund, summarizeNewSystem, parseTemplateFields, buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };
+module.exports = { buildSeasonChanges, parseSelfRefund, summarizeNewSystem, parseTemplateFields, buildMeta, parseLineupPage, normalizeSkills, createResolver, aggregate, serialize, isoDate, clean, checkRegression, sameContent };

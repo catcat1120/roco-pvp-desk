@@ -245,6 +245,7 @@ test('the refresh workflow only commits meta.json and runs the tests around the 
   assert.match(yml, /permissions:\s*\n\s+contents: write/);
   assert.ok(yml.indexOf('npm test') < yml.indexOf('npm run meta') && yml.indexOf('npm run meta') < yml.lastIndexOf('npm test'));
   assert.match(yml, /issues: write/);
+  assert.match(yml, /::warning::data\.json/, 'a stale data.json is announced on the run without failing it');
   assert.match(yml, /gh issue list --state all/, 'searches closed issues too, so it is only ever filed once');
   assert.match(yml, /name: Open an issue[^\n]*\n\s+continue-on-error: true/, 'a failed notification must not fail the refresh');
   assert.ok(yml.indexOf('git push') < yml.indexOf('gh issue create'), 'the data is committed before any notification');
@@ -316,6 +317,110 @@ test('currentHot reports ok, empty, or stale, and flags tiny samples', () => {
   assert.equal(RocoMeta.currentHot({ hot: { lineups: [], spirits: [], skills: [] } }, now).status, 'stale', 'an old meta.json without season info');
   assert.equal(RocoMeta.currentHot({ hot: hot() }, null).status, 'ok', 'without season.json it trusts the season recorded in meta.json');
   assert.equal(RocoMeta.currentHot(null, now).status, 'stale');
+});
+
+// ---- 赛季调整日志 ----
+
+const historyLua = `return {
+  versions={["s3-2026-08-18"]={date="2026-08-18",label="S3 8月18日",season="S3"},["s4-2026-09-10"]={date="2026-09-10",label="S4 9月10日",season="S4"},["s4-2026-09-24"]={date="2026-09-24",label="S4 9月24日",season="S4"}},
+  pets={
+    pet_1={{changes={{after=79,before=117,field="物攻",group="stats"},{after=110,before=135,field="物防",group="stats"},{after=90,before=95,field="超导威力",group="skill"},{action="added",group="learnset",name="暖阳",source="技能书"}},kind="changed",version="s4-2026-09-10"},
+          {changes={{after=1,before=2,field="生命",group="stats"}},kind="changed",version="s3-2026-08-18"}},
+    pet_2={{changes={{after=90,before=95,field="超导威力",group="skill"},{after="新说明",before="旧说明",field="超导说明",group="skill"},{after=60,before=70,field="速度",group="stats"}},kind="changed",version="s4-2026-09-10"}},
+    pet_3={{changes={{action="introduced",group="identity",value="新怪"},{after=99,before=0,field="生命",group="stats"}},kind="introduced",version="s4-2026-09-10"}},
+    pet_4={{changes={{after="X2",before="X1",field="特性说明",group="feature"}},kind="changed",version="s4-2026-09-10"}},
+    pet_5={{changes={{after="X2",before="X1",field="特性说明",group="feature"}},kind="changed",version="s4-2026-09-10"}},
+    pet_6={{changes={{after=5,before=4,field="未知技能能耗",group="skill"}},kind="changed",version="s4-2026-09-24"}},
+    pet_7={{changes={{after=1,before=2,field="生命",group="stats"}},kind="changed",version="s3-2026-08-18"}}
+  }
+}`;
+const catalogLua = 'return {pet_1={name="岚鸟"},pet_2={name="权杖-V"},pet_3={name="新怪"},pet_4={name="甜甜（甲味）"},pet_5={name="甜甜（乙味）"},pet_6={name="雪球（甲）"},pet_7={name="岚鸟（春天的样子）"}}';
+const changeSkills = { 超导: { element: '电', category: '攻击' }, 暖阳: { element: '火', category: '攻击' } };
+const changeData = { spirits: mini.spirits.map(spirit => ({ ...spirit, stats: { hp: 10, pa: 79, ma: 1, pd: 110, md: 1, sp: 60 } })) };
+const changesOf = (over = {}) => lib.buildSeasonChanges({ historyLua, catalogLua, skills: changeSkills, data: changeData, season: { id: 'S4' }, source: { name: '日志', url: 'u', module: 'm', revised: '2026-09-24T03:07:39Z' }, ...over });
+
+test('buildSeasonChanges keeps only the requested season and separates the kinds of change', () => {
+  const changes = changesOf();
+  assert.equal(changes.season, 'S4');
+  assert.deepEqual(changes.versions.map(version => version.id), ['s4-2026-09-10', 's4-2026-09-24']);
+  assert.equal(changes.source.revised, '2026-09-24');
+  const names = changes.stats.map(entry => entry.name);
+  assert.ok(names.includes('岚鸟') && names.includes('权杖-V'));
+  assert.ok(!names.includes('岚鸟（春天的样子）'), 'an S3 stat change is not an S4 change');
+  const bird = changes.stats.find(entry => entry.name === '岚鸟');
+  assert.deepEqual(bird.changes, [{ field: '物攻', before: 117, after: 79 }, { field: '物防', before: 135, after: 110 }]);
+  assert.equal(bird.ref, '岚鸟');
+  assert.deepEqual(changes.newSpirits.map(entry => [entry.name, entry.ref]), [['新怪', null]], 'an introduced spirit is new, and its starting values are not listed as changes');
+  assert.ok(!changes.stats.some(entry => entry.name === '新怪'));
+});
+
+test('buildSeasonChanges groups identical skill and trait changes and splits skill names from what changed', () => {
+  const changes = changesOf();
+  const power = changes.skills.find(row => row.name === '超导' && row.aspect === '威力');
+  assert.deepEqual([power.before, power.after, power.spirits], [95, 90, 2], 'the same change on two spirits is one row');
+  assert.ok(changes.skills.some(row => row.name === '超导' && row.aspect === '说明' && row.after === '新说明'));
+  const unknown = changes.skills.find(row => row.name === '未知技能能耗');
+  assert.equal(unknown.aspect, '', 'a skill missing from the table is kept whole rather than guessed');
+  assert.deepEqual(changes.features, [{ names: ['甜甜（乙味）', '甜甜（甲味）'].sort(), before: 'X1', after: 'X2', date: '2026-09-10' }]);
+  assert.deepEqual(changes.learned, { skills: 1, spirits: 1 });
+});
+
+test('buildSeasonChanges sorts the biggest stat swings first and counts per version', () => {
+  const changes = changesOf();
+  assert.equal(changes.stats[0].name, '岚鸟', 'a 63-point swing outranks a 10-point one');
+  const [opening, patch] = changes.versions;
+  assert.equal(opening.spirits, 5);
+  assert.equal(opening.introduced, 1);
+  assert.equal(patch.stats, 0, 'the later patch changed no stats');
+  assert.equal(patch.spirits, 1);
+});
+
+test('buildSeasonChanges checks data.json against the newest value in the log', () => {
+  assert.deepEqual(changesOf().dataCheck, { checked: 3, matching: 3, mismatched: [] });
+  const stale = { spirits: changeData.spirits.map(spirit => (spirit.name === '岚鸟' ? { ...spirit, stats: { ...spirit.stats, pa: 117 } } : spirit)) };
+  const check = changesOf({ data: stale }).dataCheck;
+  assert.equal(check.matching, 2);
+  assert.deepEqual(check.mismatched, [{ name: '岚鸟', field: '物攻', expected: 79, actual: 117 }]);
+});
+
+test('buildSeasonChanges returns null when the log has no version for that season', () => {
+  assert.equal(changesOf({ season: { id: 'S9' } }), null);
+});
+
+test('buildMeta records the change log and the skill source it was given', () => {
+  const args = { skillsLua, skillsRevised: '2026-09-26T00:00:00Z', skillsInfo: { name: '洛克王国世界WIKI', module: '模块:Pets/data/Skills' }, lineupPages: [], data: mini, now: '2026-09-29T00:00:00.000Z', urls: { site: 's', lineups: 'l', skills: 'k' }, season: { id: 'S4', startsOn: '2026-09-10' } };
+  const built = lib.buildMeta({ ...args, changes: changesOf() });
+  assert.equal(built.changes.season, 'S4');
+  assert.deepEqual([built.source.skills.name, built.source.skills.module], ['洛克王国世界WIKI', '模块:Pets/data/Skills']);
+  assert.equal('changes' in lib.buildMeta(args), false, 'no log, no field');
+});
+
+test('meta.json carries a consistent S4 change log that agrees with data.json', () => {
+  const changes = meta.changes;
+  assert.ok(changes, 'the change log is recorded');
+  assert.equal(changes.season, meta.hot.season.id);
+  assert.ok(changes.versions.length >= 1);
+  for (const version of changes.versions) assert.match(version.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(changes.versions.every(version => version.date >= meta.hot.season.startsOn), 'only versions from the current season');
+  assert.match(changes.source.url, /^https:\/\/wiki\.biligame\.com\/nrc\//);
+  assert.ok(changes.stats.length > 0 && changes.skills.length > 0);
+  const dates = new Set(changes.versions.map(version => version.date));
+  const names = new Set(data.spirits.map(spirit => spirit.name));
+  for (const entry of changes.stats) {
+    assert.ok(dates.has(entry.date));
+    assert.ok(entry.ref === null || names.has(entry.ref), `${entry.name} -> ${entry.ref}`);
+    for (const change of entry.changes) assert.ok(Number.isInteger(change.before) && Number.isInteger(change.after) && change.before !== change.after, `${entry.name} ${change.field}`);
+  }
+  for (const row of changes.skills) {
+    assert.ok(row.name && dates.has(row.date) && row.spirits >= 1);
+    if (row.aspect && row.aspect !== '说明') assert.ok(meta.skills[row.name], `${row.name} is a known skill`);
+  }
+  // 对阵速查用 data.json 的种族值。这里只检查核对结果自洽；data.json 落后于日志时页面和刷新脚本会醒目警告，
+  // 但不让测试失败——否则外部数据文件的滞后会把技能、阵容的每周刷新一起卡住。
+  const check = changes.dataCheck;
+  assert.ok(check.checked > 100, 'the check covers many stat values');
+  assert.equal(check.matching + check.mismatched.length, check.checked, 'every checked value is either matching or listed');
+  for (const item of check.mismatched) assert.ok(item.name && item.field && item.expected !== item.actual);
 });
 
 // ---- 新投稿系统监控 ----
@@ -397,7 +502,9 @@ test('meta.json describes its source, dates and community-recommendation label',
   assert.equal(meta.label, '社区推荐');
   assert.match(meta.notice, /不代表对局使用率/);
   assert.equal(meta.source.name, '洛克王国 BWIKI');
-  for (const url of [meta.source.url, meta.source.lineups.url, meta.source.skills.url]) assert.match(url, /^https:\/\/wiki\.biligame\.com\/rocom\//);
+  for (const url of [meta.source.url, meta.source.lineups.url]) assert.match(url, /^https:\/\/wiki\.biligame\.com\/rocom\//, 'lineups come from the rocom wiki');
+  assert.match(meta.source.skills.url, /^https:\/\/wiki\.biligame\.com\/nrc\//, 'skills come from the nrc wiki, which tracks the current season');
+  assert.equal(meta.source.skills.module, '模块:Pets/data/Skills');
   const { firstSubmitted, lastSubmitted } = meta.source.lineups;
   assert.match(firstSubmitted, /^\d{4}-\d{2}-\d{2}$/);
   assert.ok(firstSubmitted <= lastSubmitted);

@@ -15,3 +15,8 @@
 @media(max-width:800px){.season-list li{grid-template-columns:52px minmax(0,1fr)}.season-list time{grid-column:2;grid-row:1}.season-list .what{grid-column:1/-1}}
 
 .skill-data-panel{margin-top:20px}.skill-data-panel .skill-search{margin:0 0 14px;max-width:520px}.skill-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}.skill-results>.empty,.skill-results>.result-note{grid-column:1/-1}
+
+.changes-panel{margin-bottom:20px}.changes-panel[hidden]{display:none}.version-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px;font-size:13px;line-height:1.6;color:#dbe5f2}.version-list b{display:inline-block;min-width:52px;color:#d8f35b;font-variant-numeric:tabular-nums}.check-ok{margin:0 0 14px;font-size:13px;color:#bde7cc}
+.change-block{border:1px solid #2e4360;background:#152640;border-radius:12px;padding:12px 16px;margin-bottom:10px}.change-block summary{cursor:pointer;font-size:14px;font-weight:700;color:#e9eef7}.change-block summary:focus-visible{outline:2px solid #d8f35b;outline-offset:2px}.change-block .chips{margin-top:12px}
+.change-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px;max-height:420px;overflow:auto}.change-list li{display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;align-items:baseline;font-size:13px;line-height:1.6}.change-line{display:flex;flex-wrap:wrap;gap:6px 14px}.change-line small,.muted{color:#8ea1ba;margin-left:6px;font-size:12px}.delta{font-variant-numeric:tabular-nums;white-space:nowrap}.delta small{margin-left:3px;font-size:11px}.delta.up{color:#8fe3ae}.delta.down{color:#ff9aa5}.text-change{color:#dbe5f2}.text-change s{color:#8ea1ba}
+@media(max-width:800px){.change-list li{grid-template-columns:minmax(0,1fr);gap:2px}}

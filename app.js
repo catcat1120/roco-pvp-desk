@@ -147,6 +147,39 @@ function renderSeason() {
   box.hidden=false;
 }
 function hotStatus() { return RocoMeta.currentHot(state.meta, state.season); }
+// ---- S4 调整清单：来自 BWIKI 数据日志（游戏数据前后对比），不是官方公告原文 ----
+const STAT_ORDER = ['生命','物攻','魔攻','物防','魔防','速度'];
+function delta(before, after) {
+  const up = Number(after) > Number(before);
+  const diff = Number(after) - Number(before);
+  return `<span class="delta ${up?'up':'down'}">${escapeHTML(before)}→${escapeHTML(after)}<small>${up?'+':''}${Number.isFinite(diff)?diff:''}</small></span>`;
+}
+const spiritName = (name, ref) => ref||!state.data ? escapeHTML(name) : `${escapeHTML(name)}<small class="muted">（资料库中没有）</small>`;
+function renderChanges() {
+  const box=$('#season-changes'), c=state.meta&&state.meta.changes, season=state.season&&state.season.season;
+  if (!c||(season&&c.season!==season.id)) { box.hidden=true; box.innerHTML=''; return; }
+  const versions=c.versions.map(v=>{
+    const numeric=v.stats+v.skills+v.features;
+    return `<li><b>${escapeHTML(v.date.slice(5))}</b>${numeric?`种族值调整 ${c.stats.filter(x=>x.date===v.date).length} 只精灵，技能调整 ${v.skills} 项，特性文字调整 ${v.features} 只精灵，新增精灵/形态 ${v.introduced} 条（该版本共涉及 ${v.spirits} 只精灵的数据记录，含可学技能、孵化等）`:`没有数值调整${v.introduced?`（仅新增 ${v.introduced} 条精灵/形态记录）`:''}`}</li>`;
+  }).join('');
+  const check=c.dataCheck.mismatched.length
+    ?`<p class="provenance-note stale">⚠ 对阵速查使用的种族值与日志有 ${c.dataCheck.mismatched.length}/${c.dataCheck.checked} 项不一致（如 ${escapeHTML(c.dataCheck.mismatched.slice(0,3).map(m=>`${m.name}${m.field} 应为 ${m.expected}，现为 ${m.actual}`).join('；'))}），估算可能用了过期数值。</p>`
+    :`<p class="check-ok">✓ 对阵速查使用的种族值已与此日志核对：${c.dataCheck.matching}/${c.dataCheck.checked} 项一致。</p>`;
+  const stats=c.stats.map(x=>`<li><strong>${spiritName(x.name,x.ref)}</strong><span class="change-line">${[...x.changes].sort((a,b)=>STAT_ORDER.indexOf(a.field)-STAT_ORDER.indexOf(b.field)).map(ch=>`${escapeHTML(ch.field)} ${delta(ch.before,ch.after)}`).join('')}</span></li>`).join('');
+  const numeric=c.skills.filter(x=>x.aspect!=='说明'), texts=c.skills.filter(x=>x.aspect==='说明');
+  const skillNumbers=numeric.map(x=>`<li><strong>${escapeHTML(x.name)}</strong><span class="change-line">${escapeHTML(x.aspect||'数值')} ${delta(x.before,x.after)}<small class="muted">${x.spirits} 只精灵携带</small></span></li>`).join('');
+  const skillTexts=texts.map(x=>`<li><strong>${escapeHTML(x.name)}</strong><span class="text-change"><s>${escapeHTML(x.before)}</s><br>${escapeHTML(x.after)}</span></li>`).join('');
+  const features=c.features.map(x=>`<li><strong>${escapeHTML(x.names.join('、'))}</strong><span class="text-change"><s>${escapeHTML(x.before)}</s><br>${escapeHTML(x.after)}</span></li>`).join('');
+  const fresh=c.newSpirits.map(x=>`<span class="chip${x.ref?'':' unknown'}" title="${x.ref?'':'资料库中没有这只精灵'}">${escapeHTML(x.name)}</span>`).join('');
+  box.innerHTML=`<div class="panel-heading"><div><p class="section-kicker">当前赛季</p><h2>${escapeHTML(c.season)} 调整清单</h2></div><span class="mini-label">${escapeHTML(c.source.name)} · 修订于 ${escapeHTML(c.source.revised)}</span></div>`
+    +`<ul class="version-list">${versions}</ul>${check}`
+    +`<details class="change-block"><summary>精灵种族值调整（${c.stats.length} 只，按变动幅度排序）</summary><ul class="change-list">${stats}</ul></details>`
+    +`<details class="change-block"><summary>技能数值调整（${numeric.length} 项）</summary><ul class="change-list">${skillNumbers||'<li>无</li>'}</ul></details>`
+    +`<details class="change-block"><summary>技能与特性的说明调整（${texts.length+c.features.length} 项）</summary><ul class="change-list">${skillTexts}${features}</ul></details>`
+    +`<details class="change-block"><summary>新增精灵/形态（${c.newSpirits.length} 个）</summary><div class="chips">${fresh}</div></details>`
+    +`<p class="provenance-note">来源：<a href="${escapeHTML(safeUrl(c.source.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(c.source.name)}</a>（${escapeHTML(c.source.module)}）。这是游戏数据的前后对比，不是官方公告原文；机制类调整未必包含在内。另有 ${c.learned.skills} 个技能对 ${c.learned.spirits} 只精灵新增了可学习途径，未逐条列出。</p>`;
+  box.hidden=false;
+}
 function renderProvenance() {
   const m=state.meta, l=m.source.lineups, k=m.source.skills, age=RocoMeta.ageInDays(l.lastSubmitted);
   const season=state.season&&state.season.season;
@@ -164,7 +197,7 @@ function renderProvenance() {
     +`<div><dt>当下样本</dt><dd>${current}</dd></div>`
     +(newer?`<div><dt>新版投稿</dt><dd>${newer}</dd></div>`:'')
     +`<div><dt>旧投稿</dt><dd>${l.pvp} 份 · ${plural(l.authors)} · ${escapeHTML(l.firstSubmitted)} 至 ${escapeHTML(l.lastSubmitted)}${age!==null?`（最近一份距今 ${age} 天）`:''}；不参与热门，仅在对阵速查里估算配招，并标注日期</dd></div>`
-    +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">BWIKI 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能${skillsBefore?`（早于 ${escapeHTML(season.id)} 开赛，${escapeHTML(season.id)} 新增的技能未收录）`:''}</dd></div>`
+    +`<div><dt>技能数据</dt><dd><a href="${escapeHTML(safeUrl(k.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(k.name||'BWIKI')} 技能图鉴</a>数据模块 · 修订于 ${escapeHTML(k.revised)} · 共 ${k.count} 个技能${skillsBefore?`（早于 ${escapeHTML(season.id)} 开赛，${escapeHTML(season.id)} 新增的技能未收录）`:''}</dd></div>`
     +`<div><dt>数据生成</dt><dd>${escapeHTML(m.generatedAt.slice(0,10))}（定时抓取，内容有变化才更新）</dd></div></dl>`
     +`<p class="provenance-note${status.status==='ok'&&!status.small?'':' stale'}">${escapeHTML(m.notice)} 热门里的数字表示“有多少位作者的投稿里出现了它”，不是使用率或胜率。${note}</p>`;
 }
@@ -229,7 +262,7 @@ function renderSkillData() {
   box.innerHTML=hits.length?`<p class="card-meta result-note">共 ${hits.length} 个技能${hits.length>30?'，显示前 30 个':''}。</p>`+hits.slice(0,30).map(([name,skill])=>skillRow(name,skill,current.get(name))).join(''):'<div class="empty">没有找到匹配的技能。</div>';
 }
 function renderMeta() {
-  renderSeason();
+  renderSeason(); renderChanges();
   if (!state.meta) {
     $('#meta-source').innerHTML='<div class="empty">社区推荐数据暂时无法载入，其余功能不受影响。</div>';
     for (const id of ['#hot-lineups','#hot-spirits','#hot-skills','#skill-data']) $(id).innerHTML='';
@@ -240,7 +273,7 @@ function renderMeta() {
   $('#label-lineups').textContent=`${label}${status.status==='ok'?' · 按投稿作者数排序':''}`;
   $('#label-spirits').textContent=`${label}${status.status==='ok'?' · 按收录作者数排序':''}`;
   $('#label-skills').textContent=label;
-  $('#label-skilldata').textContent=`BWIKI 技能图鉴 · 修订于 ${state.meta.source.skills.revised}`;
+  $('#label-skilldata').textContent=`${state.meta.source.skills.name||'BWIKI'} 技能图鉴 · 修订于 ${state.meta.source.skills.revised}`;
   renderProvenance(); renderHotLineups(); renderHotSpirits(); renderHotSkills(); renderSkillData();
 }
 function loadLineup(kind,index) {

@@ -37,6 +37,15 @@ jobs:
       - name: Test refreshed data
         run: npm test
 
+      # 对阵速查用 data.json 的种族值；数据日志比它新时只提醒（页面上也会有警告），不阻塞技能和阵容的刷新。
+      - name: Warn if data.json is behind the change log
+        run: |
+          node -e "
+            const c = (require('./meta.json').changes || {}).dataCheck;
+            if (c && c.mismatched.length) console.log('::warning::data.json 的种族值与赛季调整日志不一致 ' + c.mismatched.length + '/' + c.checked + ' 项，对阵速查可能在用过期数值');
+            else console.log(c ? 'data.json 与调整日志一致（' + c.checked + ' 项）' : '没有赛季调整日志');
+          "
+
       - name: Commit if changed
         run: |
           if git diff --quiet -- meta.json; then
