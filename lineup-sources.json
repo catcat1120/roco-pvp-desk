@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "url": "https://ol.3dmgame.com/gl/354707.html",
+      "title": "S4 梨螺萌蛇队阵容推荐",
+      "date": "2026-09-28",
+      "creator": "13号洛克高",
+      "publisher": "3DM（转载自小红书）",
+      "theme": "梨螺萌蛇队",
+      "evidence": "article-text",
+      "members": ["菊花梨", "卡洛儿", "寒音蛇", "化蝶", "飞飞钥"],
+      "note": "正文明确提到这五只；其余队位在可读文字里未核实。"
+    },
+    {
+      "url": "https://www.bilibili.com/video/BV1iAYR6vEST/",
+      "title": "S4赛季阵容推荐——布灵狼王队",
+      "date": "2026-09-13",
+      "creator": "小黑猫-阵容推荐",
+      "publisher": "B站",
+      "theme": "布灵狼王队",
+      "evidence": "title-only",
+      "members": [],
+      "note": "目前只核实到视频标题，尚未取得完整阵容。"
+    },
+    {
+      "url": "https://www.douyin.com/video/7684854235120566400",
+      "title": "洛克王国世界 S4 星陨队配队",
+      "date": "2026-09-13",
+      "creator": "番茄兽",
+      "publisher": "抖音",
+      "theme": "星陨队",
+      "evidence": "title-only",
+      "members": [],
+      "note": "目前只核实到标题；视频画面中的六只精灵尚未逐一核对。"
+    }
+  ]
+}

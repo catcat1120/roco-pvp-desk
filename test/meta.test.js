@@ -238,7 +238,7 @@ test('sameContent ignores only the fetch timestamp', () => {
   assert.ok(!lib.sameContent(null, a));
 });
 
-test('the refresh workflow only commits meta.json and runs the tests around the fetch', () => {
+test('the refresh workflow commits only generated data and tests around the fetch', () => {
   const yml = require('node:fs').readFileSync(require('node:path').join(__dirname, '../.github/workflows/refresh-meta.yml'), 'utf8');
   assert.match(yml, /cron: '[^']+'/);
   assert.match(yml, /workflow_dispatch:/);
@@ -249,7 +249,7 @@ test('the refresh workflow only commits meta.json and runs the tests around the 
   assert.match(yml, /gh issue list --state all/, 'searches closed issues too, so it is only ever filed once');
   assert.match(yml, /name: Open an issue[^\n]*\n\s+continue-on-error: true/, 'a failed notification must not fail the refresh');
   assert.ok(yml.indexOf('git push') < yml.indexOf('gh issue create'), 'the data is committed before any notification');
-  assert.match(yml, /git add meta\.json\n/);
+  assert.match(yml, /git add meta\.json data\.json dex\.json scout\.json\n/);
   assert.doesNotMatch(yml, /git add (-A|\.)/);
 });
 

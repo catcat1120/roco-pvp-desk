@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="./engine.js"></script>
   <script defer src="./meta.js"></script>
+  <script defer src="./dex.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -21,7 +22,7 @@
 
     <main>
       <div class="intro-row"><div><p class="eyebrow">对战工作台</p><h1>先看阵容，再进对局。</h1></div><p class="intro-note">综合属性克制、速度先后手、物魔攻防，以及社区投稿阵容里的常见配招，快速发现队伍缺口与危险对位。判断是估算，仅供赛前参考，实际结果还取决于特性、个体与操作。</p></div>
-      <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button><button role="tab" id="tab-meta" aria-selected="false" aria-controls="meta-view" type="button">社区推荐</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
+      <div class="toolbar"><div class="segmented" role="tablist" aria-label="工作模式"><button role="tab" id="tab-team" aria-selected="true" aria-controls="team-view" type="button">配队分析</button><button role="tab" id="tab-match" aria-selected="false" aria-controls="match-view" type="button">对阵速查</button><button role="tab" id="tab-dex" aria-selected="false" aria-controls="dex-view" type="button">精灵资料</button><button role="tab" id="tab-meta" aria-selected="false" aria-controls="meta-view" type="button">社区推荐</button></div><label class="mode-select">队伍规模 <select id="team-size"><option value="6">6 只</option><option value="3">3 只</option></select></label></div>
 
       <div id="status" class="status" role="status" hidden></div>
       <section class="workspace" id="team-view" role="tabpanel" aria-labelledby="tab-team">
@@ -34,9 +35,15 @@
         <div class="panel result-panel"><div class="panel-heading"><div><p class="section-kicker">逐只对照</p><h2>属性对位</h2></div><span class="mini-label" id="match-basis">种族值与配招估算 · 不含特性</span></div><div id="match-summary" class="match-summary"></div><div id="match-threats" class="threat-list"></div><div id="match-table" class="match-table-wrap"></div><div id="match-detail" class="match-detail" aria-live="polite"></div></div>
       </section>
 
+      <section id="dex-view" class="dex-view" role="tabpanel" aria-labelledby="tab-dex" hidden>
+        <div class="panel"><div class="panel-heading"><div><p class="section-kicker">配队前查资料</p><h2>精灵与可学技能</h2></div></div><div id="dex-coverage" aria-live="polite">图鉴资料加载中…</div></div>
+        <div class="dex-workspace"><div class="panel dex-browser"><label for="dex-search">查精灵、特性或可学技能</label><input id="dex-search" type="search" placeholder="如：迪莫、氧循环、徒长" autocomplete="off"><p id="dex-count" class="card-meta" aria-live="polite"></p><div id="dex-results"></div><button type="button" class="ghost-button" id="dex-more" hidden>显示更多</button></div><div class="panel dex-detail" id="dex-detail" aria-live="polite"><p class="empty">选择一只精灵，查看它的技能池和特性。</p></div></div>
+      </section>
+
       <section class="meta-view" id="meta-view" role="tabpanel" aria-labelledby="tab-meta" hidden>
         <div class="panel season-panel" id="season-notes" hidden></div>
         <div class="panel changes-panel" id="season-changes" hidden></div>
+        <div class="panel scout-panel"><div class="panel-heading"><div><p class="section-kicker">本赛季 · 来源核对中</p><h2>近期配队线索</h2></div><span class="mini-label" id="scout-label">加载中</span></div><p class="panel-foot">文章与视频只作为线索；确认完整六只和独立作者后，才会进入热门配队统计。</p><div id="scout-results"></div></div>
         <div class="panel provenance" id="meta-source"></div>
         <div class="meta-grid">
           <div class="panel meta-panel"><div class="panel-heading"><div><p class="section-kicker">社区推荐</p><h2>热门配队</h2></div><span class="mini-label" id="label-lineups">当下数据</span></div><div id="hot-lineups" class="meta-list"></div></div>
@@ -47,7 +54,7 @@
       </section>
     </main>
 
-    <footer><span>玩家自制工具，与游戏官方无关联。</span><span>精灵与属性资料参考 <a href="https://github.com/s422346963/RokePvP-Calculator" target="_blank" rel="noopener noreferrer">RokePvP-Calculator</a>；社区推荐与技能数据来自 <a href="https://wiki.biligame.com/rocom/" target="_blank" rel="noopener noreferrer">洛克王国 BWIKI</a> 玩家投稿（版权归原作者与来源方所有）；请以游戏内当前版本为准。</span></footer>
+    <footer><span>玩家自制工具，与游戏官方无关联。</span><span>初始精灵目录参考 <a href="https://github.com/s422346963/RokePvP-Calculator" target="_blank" rel="noopener noreferrer">RokePvP-Calculator</a>；当前属性、种族值和技能池参考 <a href="https://wiki.biligame.com/nrc/" target="_blank" rel="noopener noreferrer">洛克王国：世界 BWIKI</a>；社区投稿参考 <a href="https://wiki.biligame.com/rocom/" target="_blank" rel="noopener noreferrer">洛克王国 BWIKI</a>。配队线索在卡片中逐条标注来源；请以游戏内当前版本为准。</span></footer>
   </div>
 </body>
 </html>

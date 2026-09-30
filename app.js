@@ -26,7 +26,7 @@ function renderRoster(kind) {
   const ids = kind === 'team' ? state.team : state.opponents;
   const list = $(kind === 'team' ? '#team-list' : '#opponent-list');
   $(kind === 'team' ? '#team-count' : '#opponent-count').textContent = `${ids.length} / ${state.size}`;
-  list.innerHTML = ids.length ? ids.map((id,index) => { const s=getSpirit(id); return `<div class="roster-item"><div class="roster-main"><div class="roster-name">${escapeHTML(s.name)}</div><div class="roster-meta">No.${escapeHTML(s.no)} · ${escapeHTML(typesText(s))}${s.form ? ' · '+escapeHTML(s.form):''}</div></div><button type="button" class="remove-button" data-kind="${kind}" data-index="${index}" aria-label="移除${escapeHTML(s.name)}">×</button></div>`; }).join('') : `<div class="empty">${kind === 'team' ? '搜索并加入精灵，开始检查阵容。' : '搜索并加入对手精灵，查看逐只对位。'}</div>`;
+  list.innerHTML = ids.length ? ids.map((id,index) => { const s=getSpirit(id); return `<div class="roster-item"><div class="roster-main"><button type="button" class="roster-name dex-open" data-dex="${escapeHTML(s.id)}" aria-label="查看${escapeHTML(s.name)}的技能资料">${escapeHTML(s.name)} ↗</button><div class="roster-meta">No.${escapeHTML(s.no)} · ${escapeHTML(typesText(s))}${s.form ? ' · '+escapeHTML(s.form):''}</div></div><button type="button" class="remove-button" data-kind="${kind}" data-index="${index}" aria-label="移除${escapeHTML(s.name)}">×</button></div>`; }).join('') : `<div class="empty">${kind === 'team' ? '搜索并加入精灵，开始检查阵容。' : '搜索并加入对手精灵，查看逐只对位。'}</div>`;
 }
 function renderCoverage() {
   const members = state.team.map(getSpirit);
@@ -99,7 +99,7 @@ function renderMatch() {
 function render() { renderRoster('team'); renderRoster('opponent'); renderCoverage(); renderMatch(); }
 function setTab(tab) {
   state.tab=tab;
-  for (const name of ['team','match','meta']) {
+  for (const name of ['team','match','dex','meta']) {
     $(`#${name}-view`).hidden=tab!==name; $(`#tab-${name}`).setAttribute('aria-selected',tab===name);
   }
 }
@@ -311,6 +311,18 @@ async function loadMeta() {
     state.meta=meta; state.metaIndex=RocoMeta.createIndex(meta,state.data);
   } catch(_) { state.meta=null; state.metaIndex=null; }
 }
+async function loadScout() {
+  const box=$('#scout-results');
+  try {
+    const response=await fetch('./scout.json');if(!response.ok)throw new Error('unavailable');
+    const scout=await response.json();
+    if(scout.schema!==1||scout.season.startsOn!==state.season?.season?.startsOn)throw new Error('season');
+    $('#scout-label').textContent=`${scout.leads.length} 条线索 · ${scout.confirmed.length} 套已核实`;
+    const confirmed=scout.confirmed.map(row=>`<article class="scout-card"><h3>${escapeHTML(row.members.join('、'))}</h3><p class="card-meta">${row.authors} 位独立作者确认了完整六只 · 仅表示社区推荐</p><div class="chips">${row.sources.map(s=>`<a href="${escapeHTML(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(s.creator)} · ${escapeHTML(s.date)}</a>`).join('')}</div></article>`).join('');
+    const leads=scout.leads.map(s=>`<article class="scout-card"><h3><a href="${escapeHTML(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">${escapeHTML(s.title)} ↗</a></h3><p class="card-meta">${escapeHTML(s.publisher)} · ${escapeHTML(s.creator)} · ${escapeHTML(s.date)} · ${s.evidence==='article-text'?'正文线索':'仅标题线索'}</p>${s.members.length?`<p>已核实提到：${escapeHTML(s.members.join('、'))}（${s.members.length}/6）</p>`:''}<p class="card-meta">${escapeHTML(s.note||'')}</p></article>`).join('');
+    box.innerHTML=(confirmed||'<p class="empty">目前还没有达到“完整六只＋至少两位独立作者”标准的热门配队。</p>')+leads;
+  } catch(_) { $('#scout-label').textContent='待更新';box.innerHTML='<p class="empty">配队线索暂时无法加载，请稍后刷新。</p>'; }
+}
 async function init() {
   try {
     const response=await fetch('./data.json'); if(!response.ok)throw new Error('资料无法载入');
@@ -321,11 +333,15 @@ async function init() {
     state.size=stored.size===3?3:6; $('#team-size').value=state.size;
     state.team=Array.isArray(stored.team)?stored.team.filter(id=>getSpirit(id)).slice(0,state.size):[];
     state.opponents=Array.isArray(stored.opponents)?stored.opponents.filter(id=>getSpirit(id)).slice(0,state.size):[];
-    $('#data-tag').textContent=`${state.data.spirits.length} 条精灵资料 · 2026.09`;
-    attachPicker('team');attachPicker('opponent');render();renderMeta();
+    const dexRevision=state.data.source?.enrichment?.modules?.Catalog?.revised?.slice(0,10);
+    $('#data-tag').textContent=`${state.data.spirits.length} 条精灵资料${dexRevision?' · '+dexRevision:''}`;
+    attachPicker('team');attachPicker('opponent');render();renderMeta();loadScout();
+    RocoDex.mount(state.data);
   } catch(error) {announce('精灵资料加载失败，请刷新页面重试。',true);return;}
 }
 document.addEventListener('click',event=>{
+  const dex=event.target.closest('[data-dex]');
+  if(dex){setTab('dex');RocoDex.show(dex.dataset.dex);}
   const remove=event.target.closest('.remove-button');
   if(remove){const ids=remove.dataset.kind==='team'?state.team:state.opponents;ids.splice(Number(remove.dataset.index),1);save();render()}
   const load=event.target.closest('[data-load]');
@@ -338,6 +354,7 @@ document.addEventListener('click',event=>{
 });
 $('#tab-team').addEventListener('click',()=>setTab('team'));
 $('#tab-match').addEventListener('click',()=>setTab('match'));
+$('#tab-dex').addEventListener('click',()=>setTab('dex'));
 $('#tab-meta').addEventListener('click',()=>setTab('meta'));
 $('#skill-search').addEventListener('input',()=>{if(state.meta)renderSkillData()});
 $('#team-size').addEventListener('change',event=>{
